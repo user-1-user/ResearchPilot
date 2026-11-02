@@ -1,7 +1,7 @@
 /* eslint-disable */
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { FileText, Upload, AlertTriangle, Loader2, GitCompare } from "lucide-react";
+import { FileText, Upload, AlertTriangle, Loader2, GitCompare, Trash2 } from "lucide-react"; // 👈 引入了 Trash2
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -42,7 +42,7 @@ export default function Library() {
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!localStorage.getItem("yantu_token")) {
       window.dispatchEvent(new Event("open-login-modal"));
-      e.target.value = ""; // 清空选中的文件
+      e.target.value = ""; 
       return;
     }
     const f = e.target.files?.[0]; if (!f) return;
@@ -57,6 +57,31 @@ export default function Library() {
       alert("上传失败"); 
     } finally { 
       setLoading(false); 
+    }
+  };
+
+  // 👇 新增：删除文献逻辑
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    // 阻止事件冒泡，防止触发卡片的 toggleSelect
+    e.stopPropagation();
+    
+    if (!confirm("确定要删除这篇文献吗？")) return;
+    
+    if (!localStorage.getItem("yantu_token")) {
+      window.dispatchEvent(new Event("open-login-modal"));
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/papers/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setSelectedIds(prev => prev.filter(item => item !== id));
+        fetchPapers(); // 刷新列表
+      } else {
+        alert("删除失败");
+      }
+    } catch (error) {
+      console.error("删除失败", error);
     }
   };
 
@@ -123,7 +148,15 @@ export default function Library() {
                 isSelected ? "border-indigo-500 shadow-md ring-2 ring-indigo-100" : "border-slate-200 shadow-sm hover:border-indigo-300"
               }`}
             >
-              <div className="absolute top-4 right-4">
+              {/* 👇 修改：右上角同时放删除按钮和复选框 */}
+              <div className="absolute top-4 right-4 flex items-center gap-3">
+                <button 
+                  onClick={(e) => handleDelete(e, p.id)}
+                  className="text-slate-300 hover:text-red-500 transition-colors p-1"
+                  title="删除文献"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
                 <input 
                   type="checkbox" 
                   checked={isSelected}
@@ -131,8 +164,9 @@ export default function Library() {
                   className="w-5 h-5 accent-indigo-600 cursor-pointer"
                 />
               </div>
+              
               <FileText className={`w-10 h-10 mb-4 ${isSelected ? "text-indigo-500" : "text-blue-500"}`} />
-              <h3 className="font-bold text-lg mb-1 truncate pr-8" title={p.filename}>{p.filename.replace(".pdf", "")}</h3>
+              <h3 className="font-bold text-lg mb-1 truncate pr-16" title={p.filename}>{p.filename.replace(".pdf", "")}</h3>
               <p className="text-sm text-slate-400 mb-6">{p.page_count} 页</p>
               <Link 
                 href={`/reader/${p.id}`} 

@@ -432,3 +432,13 @@ async def agent_chat(payload: dict):
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
     return StreamingResponse(generate(), media_type="text/event-stream")
+@app.delete("/api/papers/{pid}")
+def delete_paper(pid: str):
+    if pid in DB:
+        # 可选：顺便把 uploads 里的物理文件删掉
+        file_path = os.path.join(UPLOAD_DIR, f"{pid}.pdf")
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        del DB[pid]
+        return {"message": "删除成功"}
+    raise HTTPException(status_code=404, detail="论文不存在")

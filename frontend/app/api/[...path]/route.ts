@@ -2,39 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const BACKEND_URL = 'http://127.0.0.1:8000';
 
-export async function GET(req: NextRequest) {
+async function proxyRequest(req: NextRequest) {
   const path = req.nextUrl.pathname;
-  try {
-    const res = await fetch(`${BACKEND_URL}${path}`);
-    
-    // 统一解析为文本，再转 JSON 返回，防止丢失 Content-Type
-    const text = await res.text();
-    let data;
-    try {
-      data = text ? JSON.parse(text) : {};
-    } catch {
-      data = { detail: text };
-    }
-    return NextResponse.json(data, { status: res.status });
-  } catch (error) {
-    console.error("代理 GET 请求失败:", error);
-    return NextResponse.json({ detail: "无法连接到后端服务" }, { status: 502 });
-  }
-}
+  const method = req.method;
 
-export async function POST(req: NextRequest) {
-  const path = req.nextUrl.pathname;
   try {
     const contentType = req.headers.get('content-type') || '';
-    const body = await req.arrayBuffer();
+    // GET 请求没有 body，其他请求读取 body
+    const body = method !== 'GET' && method !== 'HEAD' ? await req.arrayBuffer() : undefined;
 
     const res = await fetch(`${BACKEND_URL}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': contentType },
+      method,
+      headers: contentType ? { 'Content-Type': contentType } : {},
       body: body,
     });
 
-    // 1. 针对流式问答的特殊处理 (SSE)
+    // 1. 针对流式问答 (SSE) 的特殊处理
     if (res.headers.get('content-type')?.includes('text/event-stream')) {
       return new NextResponse(res.body, {
         status: res.status,
@@ -42,7 +25,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 2. 统一解析为文本，再转 JSON 返回
+    // 2. 统一读取文本并解析为 JSON（无论是成功还是报错，保证前端能拿到 detail）
     const text = await res.text();
     let data;
     try {
@@ -50,10 +33,16 @@ export async function POST(req: NextRequest) {
     } catch {
       data = { detail: text };
     }
+
     return NextResponse.json(data, { status: res.status });
-    
+
   } catch (error) {
-    console.error("代理 POST 请求失败:", error);
+    console.error(`代理 ${method} 请求失败:`, error);
     return NextResponse.json({ detail: "无法连接到后端服务" }, { status: 502 });
   }
 }
+
+// 导出所有需要的方法
+export async function GET(req: NextRequest) { return proxyRequest(req); }
+export async function POST(req: NextRequest) { return proxyRequest(req); }
+export async function DELETE(req: NextRequest) { return proxyRequest(req); }
