@@ -3007,8 +3007,8 @@ def _run_tool(user_id: str, tool: str, args: dict) -> dict:
         return _generate_literature_review(user_id, topic)
     if tool == "search_arxiv":
         query = str(args.get("query", "machine learning"))
-        words = re.findall(r"[A-Za-z0-9:._-]+", query)
-        clean_query = " ".join(words[:8]) or "machine learning"
+        words = re.findall(r"[A-Za-z0-9\u4e00-\u9fff:._-]+", query)
+        clean_query = " ".join(words[:8]) or query.strip() or "cat:cs.AI"
         sort_by = args.get("sort_by", "relevance")
 
         if sort_by == "latest":
