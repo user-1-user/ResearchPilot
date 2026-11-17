@@ -48,7 +48,6 @@ from openai import OpenAI
 from pydantic import BaseModel, Field, StringConstraints, ValidationError
 from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
-from starlette.staticfiles import StaticFiles
 
 try:
     from rapidocr_onnxruntime import RapidOCR
@@ -119,7 +118,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept", "X-Request-ID"],
 )
-app.mount("/media", StaticFiles(directory=str(MEDIA_DIR)), name="media")
 
 security = HTTPBearer(auto_error=False)
 
@@ -189,6 +187,12 @@ def init_db() -> None:
             created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_chunks_paper ON chunks(paper_id, page_no);
+        CREATE TABLE IF NOT EXISTS media_assets (
+            filename TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_media_assets_user ON media_assets(user_id);
         """)
 
 
@@ -1672,13 +1676,24 @@ def download_paper(paper_id: str, user: dict = Depends(current_user)):
 
 
 @app.get("/api/media/{filename}")
-def get_media(filename: str):
-    # Charts are public static artifacts; filenames are random UUIDs and path traversal is blocked.
-    safe = Path(filename).name
-    path = MEDIA_DIR / safe
-    if not path.exists() or path.suffix.lower() not in {".png", ".jpg", ".svg"}:
-        raise HTTPException(404, "图表不存在")
-    return FileResponse(path)
+def get_media(filename: str, user: dict = Depends(current_user)):
+    if not re.fullmatch(r"chart_[0-9a-f]{14}\.png", filename):
+        raise HTTPException(404, "?????")
+
+    with db() as conn:
+        row = conn.execute(
+            "SELECT user_id FROM media_assets WHERE filename=?",
+            (filename,),
+        ).fetchone()
+
+    if not row or row["user_id"] != user["id"]:
+        raise HTTPException(404, "?????")
+
+    path = MEDIA_DIR / filename
+    if not path.is_file():
+        raise HTTPException(404, "?????")
+
+    return FileResponse(path, media_type="image/png")
 
 
 # -----------------------------------------------------------------------------
@@ -2302,6 +2317,11 @@ async def csv_plot(file: UploadFile = File(...), user: dict = Depends(current_us
         ax.grid(alpha=0.25)
         ax.set_title("Experimental Results")
         fig.tight_layout(); fig.savefig(output, bbox_inches="tight"); plt.close(fig)
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO media_assets(filename, user_id, created_at) VALUES(?,?,?)",
+                (output.name, user["id"], _iso(_now())),
+            )
         stats_text = df[[x_col, chosen_y]].describe().to_string()
         if llm_client:
             caption = llm_text(

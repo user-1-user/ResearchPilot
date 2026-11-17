@@ -3,7 +3,7 @@
 
 
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FileSpreadsheet, PenTool, Loader2, Sparkles, Download, BookOpen } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
@@ -26,6 +26,13 @@ const cleanMarkdown = (md: string) => {
 export default function CopilotPage() {
   const [activeTab, setActiveTab] = useState<'csv' | 'framework' | 'review' | 'idea'>('csv');
   const [plot, setPlot] = useState<PlotResult | null>(null);
+  const [plotImageUrl, setPlotImageUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (plotImageUrl) URL.revokeObjectURL(plotImageUrl);
+    };
+  }, [plotImageUrl]);
   const [uploading, setUploading] = useState(false);
   const [idea, setIdea] = useState("把大模型应用到医学影像的病灶自动分割中，提升小目标识别精度。");
   const [framework, setFramework] = useState("");
@@ -48,6 +55,13 @@ export default function CopilotPage() {
       const res = await apiFetch("/api/csv/plot", { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "CSV 解析失败");
+      const imageResponse = await apiFetch(data.image_url);
+      if (!imageResponse.ok) {
+        throw new Error("???????????? CSV");
+      }
+      const imageBlob = await imageResponse.blob();
+      const objectUrl = URL.createObjectURL(imageBlob);
+      setPlotImageUrl(objectUrl);
       setPlot(data);
     } catch (e) { setError(e instanceof Error ? e.message : "CSV 生成失败"); }
     finally { setUploading(false); }
@@ -139,13 +153,13 @@ export default function CopilotPage() {
               <div className="flex flex-1 flex-col">
                 {plot ? (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <img src={plot.image_url} alt="Generated chart" className="mx-auto max-h-80 rounded-lg border border-slate-200 bg-white" />
+                    <img src={plotImageUrl || undefined} alt="Generated chart" className="mx-auto max-h-80 rounded-lg border border-slate-200 bg-white" />
                     <div className="mt-4 rounded-lg bg-white p-4 border border-slate-100">
                       <div className="mb-2 text-xs font-semibold text-slate-700">Figure Caption & Insight</div>
                       <p className="whitespace-pre-wrap text-sm leading-6 text-slate-600">{cleanMarkdown(plot.caption)}</p>
                       <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
                         <span>{plot.rows} rows · {plot.x_column} vs {plot.y_column}</span>
-                        <a href={plot.image_url} download className="inline-flex items-center gap-1 text-blue-600 hover:underline"><Download className="h-3.5 w-3.5" /> 下载图表</a>
+                        <a href={plotImageUrl || undefined} download className="inline-flex items-center gap-1 text-blue-600 hover:underline"><Download className="h-3.5 w-3.5" /> 下载图表</a>
                       </div>
                     </div>
                   </div>
