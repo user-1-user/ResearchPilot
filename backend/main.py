@@ -22,10 +22,11 @@ import shutil
 import sqlite3
 import statistics
 import tempfile
+import threading
 import time
 import uuid
 import xml.etree.ElementTree as ET
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, deque
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -40,7 +41,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import pandas as pd
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -218,6 +219,119 @@ def _password_hash(password: str, salt: bytes) -> str:
     return raw.hex()
 
 
+# Login protection: in-memory limits for single-instance deployments.
+_LOGIN_RATE_LOCK = threading.Lock()
+_LOGIN_REQUESTS: dict[str, deque[float]] = defaultdict(deque)
+_LOGIN_FAILURES: dict[tuple[str, str], deque[float]] = defaultdict(deque)
+_LOGIN_BLOCKED_UNTIL: dict[tuple[str, str], float] = {}
+
+_LOGIN_IP_WINDOW_SECONDS = 60
+_LOGIN_IP_MAX_REQUESTS = 10
+_LOGIN_IP_TRACKED_MAX = 10000
+_LOGIN_FAILURE_WINDOW_SECONDS = 900
+_LOGIN_FAILURE_MAX_ATTEMPTS = 5
+_LOGIN_LOCK_SECONDS = 900
+
+
+def _reset_login_rate_limits() -> None:
+    """Reset login limiter state for isolated tests."""
+    with _LOGIN_RATE_LOCK:
+        _LOGIN_REQUESTS.clear()
+        _LOGIN_FAILURES.clear()
+        _LOGIN_BLOCKED_UNTIL.clear()
+
+
+def _check_login_rate_limit(ip: str, username: str) -> None:
+    now = time.monotonic()
+    key = (ip, username.strip().casefold())
+
+    with _LOGIN_RATE_LOCK:
+        # Bound the number of tracked IPs without evicting active limits.
+        if ip not in _LOGIN_REQUESTS and len(_LOGIN_REQUESTS) >= _LOGIN_IP_TRACKED_MAX:
+            for old_ip in list(_LOGIN_REQUESTS):
+                q = _LOGIN_REQUESTS[old_ip]
+                while q and now - q[0] >= _LOGIN_IP_WINDOW_SECONDS:
+                    q.popleft()
+                if not q:
+                    _LOGIN_REQUESTS.pop(old_ip, None)
+
+            if len(_LOGIN_REQUESTS) >= _LOGIN_IP_TRACKED_MAX:
+                raise HTTPException(
+                    status_code=429,
+                    detail="\u5f53\u524d\u767b\u5f55\u8bf7\u6c42\u8f83\u591a\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+                    headers={"Retry-After": str(_LOGIN_IP_WINDOW_SECONDS)},
+                )
+
+        requests = _LOGIN_REQUESTS[ip]
+        while requests and now - requests[0] >= _LOGIN_IP_WINDOW_SECONDS:
+            requests.popleft()
+
+        if len(requests) >= _LOGIN_IP_MAX_REQUESTS:
+            retry = max(1, int(_LOGIN_IP_WINDOW_SECONDS - (now - requests[0]) + 0.999))
+            raise HTTPException(
+                status_code=429,
+                detail="\u767b\u5f55\u8bf7\u6c42\u8fc7\u4e8e\u9891\u7e41\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+                headers={"Retry-After": str(retry)},
+            )
+
+        requests.append(now)
+
+        blocked_until = _LOGIN_BLOCKED_UNTIL.get(key)
+        if blocked_until is not None:
+            if now < blocked_until:
+                retry = max(1, int(blocked_until - now + 0.999))
+                raise HTTPException(
+                    status_code=429,
+                    detail="\u767b\u5f55\u5931\u8d25\u6b21\u6570\u8fc7\u591a\uff0c\u8bf7 15 \u5206\u949f\u540e\u91cd\u8bd5",
+                    headers={"Retry-After": str(retry)},
+                )
+            _LOGIN_BLOCKED_UNTIL.pop(key, None)
+            _LOGIN_FAILURES.pop(key, None)
+
+        if len(_LOGIN_FAILURES) > 20000 or len(_LOGIN_BLOCKED_UNTIL) > 20000:
+            for old_key in list(_LOGIN_FAILURES):
+                q = _LOGIN_FAILURES[old_key]
+                while q and now - q[0] >= _LOGIN_FAILURE_WINDOW_SECONDS:
+                    q.popleft()
+                if not q:
+                    _LOGIN_FAILURES.pop(old_key, None)
+
+            for old_key, blocked_until in list(_LOGIN_BLOCKED_UNTIL.items()):
+                if now >= blocked_until:
+                    _LOGIN_BLOCKED_UNTIL.pop(old_key, None)
+
+            # Bound memory usage even under high-cardinality attack traffic.
+            while len(_LOGIN_FAILURES) > 20000:
+                _LOGIN_FAILURES.pop(next(iter(_LOGIN_FAILURES)))
+            while len(_LOGIN_BLOCKED_UNTIL) > 20000:
+                _LOGIN_BLOCKED_UNTIL.pop(next(iter(_LOGIN_BLOCKED_UNTIL)))
+
+
+def _record_login_failure(ip: str, username: str) -> None:
+    now = time.monotonic()
+    key = (ip, username.strip().casefold())
+
+    with _LOGIN_RATE_LOCK:
+        failures = _LOGIN_FAILURES[key]
+        while failures and now - failures[0] >= _LOGIN_FAILURE_WINDOW_SECONDS:
+            failures.popleft()
+        failures.append(now)
+
+        if len(failures) >= _LOGIN_FAILURE_MAX_ATTEMPTS:
+            _LOGIN_BLOCKED_UNTIL[key] = now + _LOGIN_LOCK_SECONDS
+
+
+def _clear_login_failures(ip: str, username: str) -> None:
+    key = (ip, username.strip().casefold())
+    with _LOGIN_RATE_LOCK:
+        _LOGIN_FAILURES.pop(key, None)
+        _LOGIN_BLOCKED_UNTIL.pop(key, None)
+
+
+_LOGIN_DUMMY_SALT = b"researchpilot-login-dummy-salt"
+_LOGIN_DUMMY_HASH = _password_hash("not-a-real-password", _LOGIN_DUMMY_SALT)
+
+
 def _issue_session(user_id: str) -> str:
     token = secrets.token_urlsafe(40)
     token_hash = hashlib.sha256(token.encode()).hexdigest()
@@ -269,18 +383,38 @@ def register(payload: dict):
 
 
 @app.post("/api/auth/login")
-def login(payload: dict):
+def login(payload: dict, request: Request):
     username = str(payload.get("username", "")).strip()
     password = str(payload.get("password", ""))
+    ip = request.client.host if request.client else "unknown"
+
+    _check_login_rate_limit(ip, username)
+
     with db() as conn:
-        row = conn.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM users WHERE username=?",
+            (username,),
+        ).fetchone()
+
     if not row:
-        raise HTTPException(401, "用户名或密码错误")
+        hmac.compare_digest(
+            _password_hash(password, _LOGIN_DUMMY_SALT),
+            _LOGIN_DUMMY_HASH,
+        )
+        _record_login_failure(ip, username)
+        raise HTTPException(401, "\u7528\u6237\u540d\u6216\u5bc6\u7801\u9519\u8bef")
+
     salt = bytes.fromhex(row["password_salt"])
-    if not hmac.compare_digest(_password_hash(password, salt), row["password_hash"]):
-        raise HTTPException(401, "用户名或密码错误")
+    if not hmac.compare_digest(
+        _password_hash(password, salt),
+        row["password_hash"],
+    ):
+        _record_login_failure(ip, username)
+        raise HTTPException(401, "\u7528\u6237\u540d\u6216\u5bc6\u7801\u9519\u8bef")
+
+    _clear_login_failures(ip, username)
     token = _issue_session(row["id"])
-    return {"message": "登录成功", "token": token, "username": username}
+    return {"message": "\u767b\u5f55\u6210\u529f", "token": token, "username": username}
 
 
 @app.post("/api/auth/logout")
