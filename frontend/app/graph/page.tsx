@@ -10,7 +10,7 @@ import { apiFetch } from "@/lib/api";
 
 type GraphNode = { id: string; name: string; size: number; pagerank?: number; in_degree?: number; out_degree?: number };
 type GraphData = { nodes: GraphNode[]; edges: { source: string; target: string }[]; metrics?: { paper_count?: number; citation_edges?: number; top_foundational_papers?: GraphNode[]; isolated_papers?: string[] } };
-type FutureItem = { paper_id: string; filename: string; future_work: string[]; future_work_evidence?: { page: number; quote: string }[] };
+type FutureItem = { paper_id: string; filename: string; future_work: string[]; future_work_evidence?: { page: number | null; quote: string }[] };
 function escapeHtml(value: unknown): string {
   return String(value ?? "").replace(/[&<>"']/g, (char) => {
     const entities: Record<string, string> = {
@@ -228,7 +228,11 @@ export default function GraphPage() {
                     <li key={i} className="rounded-lg border border-amber-100 bg-amber-50/50 p-3 text-sm leading-6 text-slate-700">
                       <div>{line}</div>
                       {item.future_work_evidence?.[i] && (
-                        <div className="mt-2 text-[11px] text-amber-700">原文位置：约第 {item.future_work_evidence[i].page} 页</div>
+                        <div className="mt-2 text-[11px] text-amber-700">
+                          {typeof item.future_work_evidence[i].page === "number"
+                            ? `原文位置：第 ${item.future_work_evidence[i].page} 页`
+                            : "原文位置：未能精确定位߶，请在原文中检索"}
+                        </div>
                       )}
                     </li>
                   ))}

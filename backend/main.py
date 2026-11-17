@@ -2154,11 +2154,50 @@ def build_graph(user: dict = Depends(current_user)):
     return _build_graph_data(user["id"])
 
 
+def _normalize_future_work_text(value: str) -> str:
+    import unicodedata
+
+    text = unicodedata.normalize("NFKC", str(value or ""))
+    text = text.replace("\u00ad", "")
+    text = re.sub(r"(?<=[a-z])[-\u2010\u2011]\s+(?=[a-z])", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip().casefold()
+
+
+def _find_future_work_page(quote: str, page_rows) -> int | None:
+    normalized_quote = _normalize_future_work_text(quote)
+    if not normalized_quote:
+        return None
+
+    for row in page_rows:
+        page_text = _normalize_future_work_text(row["text"])
+        if normalized_quote in page_text:
+            return int(row["page_no"])
+
+    return None
+
+
 def _future_work(user_id: str) -> dict:
     with db() as conn:
-        rows = conn.execute("SELECT id,filename,full_text,metadata_json,page_count FROM papers WHERE user_id=?", (user_id,)).fetchall()
+        rows = conn.execute(
+            "SELECT id,filename,full_text,metadata_json,page_count FROM papers WHERE user_id=?",
+            (user_id,),
+        ).fetchall()
+        page_rows = conn.execute(
+            """
+            SELECT pg.paper_id, pg.page_no, pg.text
+            FROM pages pg
+            JOIN papers p ON p.id = pg.paper_id
+            WHERE p.user_id = ?
+            ORDER BY pg.paper_id, pg.page_no
+            """,
+            (user_id,),
+        ).fetchall()
 
     papers = [dict(r) for r in rows]
+    pages_by_paper = {}
+    for row in page_rows:
+        pages_by_paper.setdefault(row["paper_id"], []).append(row)
     if not papers:
         return {"items": [], "summary": "文献库为空。"}
 
@@ -2193,14 +2232,13 @@ def _future_work(user_id: str) -> dict:
             title = meta.get("title") or p["filename"]
 
             # 尝试简单定位页码
-            page_no = 1
-            first_match_text = unique_matches[0]
-            idx = text_content.find(first_match_text[:30])
-            if idx != -1:
-                # 粗略估算页码 (假设每页 3000 字符)
-                page_no = max(1, idx // 3000 + 1)
-
-            evidence = [{"page": page_no, "quote": q} for q in unique_matches]
+            evidence = [
+                {
+                    "page": _find_future_work_page(q, pages_by_paper.get(p["id"], [])),
+                    "quote": q,
+                }
+                for q in unique_matches
+            ]
 
             items.append({
                 "paper_id": p["id"],
