@@ -1,0 +1,901 @@
+{
+  "version": "v6_reviewed_draft",
+  "description": "80-question V6 dataset. Gold IDs, paper ownership and answer support were manually checked against the uploaded 138-chunk source. This remains a benchmark draft pending final database validation and retrieval evaluation.",
+  "question_count": 80,
+  "per_paper": {
+    "BERT": 20,
+    "TorchCurves": 20,
+    "EM-DETR": 20,
+    "Legendre": 20
+  },
+  "questions": [
+    {
+      "question_id": "BERT_01",
+      "paper_label": "BERT",
+      "question": "BERT的全称是什么？",
+      "answer": "Bidirectional Encoder Representations from Transformers。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "0bee7c9d8c724c06a6bdf253301dbd46"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_02",
+      "paper_label": "BERT",
+      "question": "BERT预训练的核心目标之一是什么？",
+      "answer": "通过随机遮蔽输入中的部分 token，并预测被遮蔽 token 的原始词汇 ID，训练 Masked Language Model。",
+      "question_type": "method",
+      "gold_chunk_ids": [
+        "bdc2879755704a8ea34f65d906d7927c",
+        "18e10fdb7caa41e1843bd6823f0e1b5d"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_03",
+      "paper_label": "BERT",
+      "question": "MLM为什么能够学习双向表示？",
+      "answer": "因为预测被遮蔽 token 时可以融合其左侧和右侧上下文，而不是只依赖单一方向。",
+      "question_type": "mechanism",
+      "gold_chunk_ids": [
+        "18e10fdb7caa41e1843bd6823f0e1b5d"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_04",
+      "paper_label": "BERT",
+      "question": "BERT预训练还使用了哪一个句子级任务？",
+      "answer": "Next Sentence Prediction（NSP），用于预训练文本对表示。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "18e10fdb7caa41e1843bd6823f0e1b5d",
+        "252b08ebfdea42f8a45c58097f7e59ad"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_05",
+      "paper_label": "BERT",
+      "question": "BERT输入表示由哪三类 embedding 相加构成？",
+      "answer": "Token embeddings、segment embeddings 和 position embeddings。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "b2b1220422c3451399b012411c7a01d1",
+        "f1c7ff8c78674630999834ff59f6e442"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_06",
+      "paper_label": "BERT",
+      "question": "BERT使用哪种子词嵌入方法，词表规模是多少？",
+      "answer": "WordPiece embeddings，词表规模为30,000。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "3a114cbb2e444eff9617b66e0677e7db"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_07",
+      "paper_label": "BERT",
+      "question": "论文实验中，MLM随机选择多少比例的WordPiece token作为预测目标？",
+      "answer": "每个序列中选择15%的WordPiece token。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "7ddeb97f7bce432daee306ad26e61fcb"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_08",
+      "paper_label": "BERT",
+      "question": "被选中的token在输入中如何处理？",
+      "answer": "80%替换为[MASK]，10%替换为随机token，10%保持不变。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "252b08ebfdea42f8a45c58097f7e59ad"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_09",
+      "paper_label": "BERT",
+      "question": "NSP任务中，句子B有多大概率是真正跟在句子A后面的下一句？",
+      "answer": "50%。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "958b4ba4090340e783dbb386530aeb03"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_10",
+      "paper_label": "BERT",
+      "question": "NSP任务中，负样本句子B如何构造？",
+      "answer": "以50%的概率从语料中随机抽取句子B，使其不是句子A的真实下一句。",
+      "question_type": "method",
+      "gold_chunk_ids": [
+        "958b4ba4090340e783dbb386530aeb03"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_11",
+      "paper_label": "BERT",
+      "question": "BERT如何适配不同的下游任务？",
+      "answer": "为每个任务接入相应的输入和输出形式，并对预训练参数进行端到端微调。",
+      "question_type": "method",
+      "gold_chunk_ids": [
+        "6579b71ab55a46c69883d623156cdcf6",
+        "75ce84ffa0d345bfa96aae10a8537891"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_12",
+      "paper_label": "BERT",
+      "question": "句子级分类任务通常使用哪个特殊token的表示？",
+      "answer": "使用[CLS] token对应的最终隐藏表示，并将其送入输出层进行分类。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "66bd56ea67b54bbcaf250824aa21352e"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_13",
+      "paper_label": "BERT",
+      "question": "BERT如何把问题和段落输入用于抽取式问答？",
+      "answer": "将问题与段落打包成一个序列，并预测答案片段的起始位置和结束位置。",
+      "question_type": "method",
+      "gold_chunk_ids": [
+        "2e2f2baacfa741078d02401df57ae440"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_14",
+      "paper_label": "BERT",
+      "question": "BERT如何表示没有答案的SQuAD v2.0问题？",
+      "answer": "将无答案情况表示为起止位置都位于[CLS] token的答案片段。",
+      "question_type": "method",
+      "gold_chunk_ids": [
+        "19b9b58a691f4140b3c8ae7cb8402cbc"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_15",
+      "paper_label": "BERT",
+      "question": "BERTBASE和BERTLARGE分别包含多少参数？",
+      "answer": "BERTBASE约1.1亿参数，BERTLARGE约3.4亿参数。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "6caf84e27aea4cad973f8acc8c15bd7c"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_16",
+      "paper_label": "BERT",
+      "question": "论文报告的GLUE平均分中，BERTBASE和BERTLARGE分别是多少？",
+      "answer": "BERTBASE为79.6，BERTLARGE为82.1。",
+      "question_type": "experiment",
+      "gold_chunk_ids": [
+        "7ef96f28486b49f798bc142db50d8796"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_17",
+      "paper_label": "BERT",
+      "question": "消融实验中，移除NSP后，哪些任务的表现受到明显影响？",
+      "answer": "QNLI、MNLI和SQuAD 1.1的表现明显下降。",
+      "question_type": "experiment",
+      "gold_chunk_ids": [
+        "41b7320e20714ca48a4c9a689923a216",
+        "6ec7c8c8ac9e4d978d60d9e04d2ae8af"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_18",
+      "paper_label": "BERT",
+      "question": "使用BERTLARGE单模型并结合TriviaQA微调时，SQuAD v1.1测试集F1是多少？",
+      "answer": "91.8。表中BERTLARGE集成模型结合TriviaQA的测试集F1为93.2。",
+      "question_type": "experiment",
+      "gold_chunk_ids": [
+        "41bdac803de24dcbadedd8eaa11986f9"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_19",
+      "paper_label": "BERT",
+      "question": "BERT预训练使用了哪些主要语料？",
+      "answer": "BooksCorpus和英文Wikipedia。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "1c1a3dff0846415a93dbc52a8ce0abb0"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "BERT_20",
+      "paper_label": "BERT",
+      "question": "论文的主要结论是什么？",
+      "answer": "通过深层双向Transformer预训练，BERT能够在多种语言理解任务上取得强表现，并可通过增加简单输出层进行下游微调。",
+      "question_type": "synthesis",
+      "gold_chunk_ids": [
+        "04d780f65c434867b0617a1706480075"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_01",
+      "paper_label": "TorchCurves",
+      "question": "TorchCurves将什么作为可学习的基本构件？",
+      "answer": "向量值参数曲线，并将其作为可学习的模型原语。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "f6e8f8d295bb4c429c3637c1cee3fa91"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_02",
+      "paper_label": "TorchCurves",
+      "question": "TorchCurves主要支持哪两类曲线基函数？",
+      "answer": "B-Spline基函数和Legendre多项式基函数。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "8e5e2802cd0b452885c20fc7c1e51fec"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_03",
+      "paper_label": "TorchCurves",
+      "question": "论文给出的曲线表示形式是什么？",
+      "answer": "曲线表示为基函数的线性组合：c(x)=Σᵢ vᵢBᵢ(x)。",
+      "question_type": "method",
+      "gold_chunk_ids": [
+        "8e5e2802cd0b452885c20fc7c1e51fec"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_04",
+      "paper_label": "TorchCurves",
+      "question": "TorchCurves中的曲线对哪些变量支持可微？",
+      "answer": "对输入特征和曲线系数均支持求导。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "9e6f40af907c45779cef884e5695e2b2"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_05",
+      "paper_label": "TorchCurves",
+      "question": "作者为什么选择纯PyTorch实现，而没有为专用硬件编写自定义内核？",
+      "answer": "作者强调可读性和可维护性，因此选择纯PyTorch实现。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "9e6f40af907c45779cef884e5695e2b2"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_06",
+      "paper_label": "TorchCurves",
+      "question": "B-SplineCurve和LegendreCurve默认假设输入位于哪个区间？",
+      "answer": "区间[-1,1]。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "687f3fc05430480ea6f3fc43d72b1497"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_07",
+      "paper_label": "TorchCurves",
+      "question": "当原始输入不在[-1,1]时，TorchCurves如何处理？",
+      "answer": "可以配置input mapping，将输入映射到[-1,1]区间。",
+      "question_type": "method",
+      "gold_chunk_ids": [
+        "687f3fc05430480ea6f3fc43d72b1497"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_08",
+      "paper_label": "TorchCurves",
+      "question": "论文列出了哪三个API层级？",
+      "answer": "可训练模块、基函数模块和函数式接口。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "b0a186c695c94748b57bce4ebe51aaf2"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_09",
+      "paper_label": "TorchCurves",
+      "question": "基函数模块相较于可训练模块有什么特点？",
+      "answer": "基函数模块缓存张量以避免重复计算，但自身不包含可训练参数。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "b0a186c695c94748b57bce4ebe51aaf2"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_10",
+      "paper_label": "TorchCurves",
+      "question": "B-Spline的结点数量、次数和系数数量之间满足什么关系？",
+      "answer": "若系数数量为P，则P=|knots|-degree+1。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "41302460b9aa4cba90890edc1a9bfa99"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_11",
+      "paper_label": "TorchCurves",
+      "question": "TorchCurves可用于连续特征嵌入的哪些示例特征？",
+      "answer": "身高、体重、BMI，以及用户上次访问网站以来经过的时间等。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "02d00c2b0f4545e2bcfebd3017150db3"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_12",
+      "paper_label": "TorchCurves",
+      "question": "论文举例说明TorchCurves如何与离散特征嵌入结合？",
+      "answer": "可用nn.Embedding处理离散特征，用Legendre曲线处理连续特征，再将两者组合输入后续模型。",
+      "question_type": "method",
+      "gold_chunk_ids": [
+        "e70a701bc1534b328aa9bba6d407b792"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_13",
+      "paper_label": "TorchCurves",
+      "question": "论文将哪类模型作为TorchCurves的一个应用示例？",
+      "answer": "Kolmogorov-Arnold Networks（KAN）。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "97a93c055daa42938e812d311e8b670a"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_14",
+      "paper_label": "TorchCurves",
+      "question": "函数回归在论文中指的是什么类型的建模任务？",
+      "answer": "模型的输出本身是一个函数，而不是单一标量或向量。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "f9dd15c2b9d54cc6b4d12e676d266abb"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_15",
+      "paper_label": "TorchCurves",
+      "question": "B-Spline计算为何可以利用稀疏性？",
+      "answer": "At any given point, only degree+2 B-Spline basis functions are non-zero.",
+      "question_type": "mechanism",
+      "gold_chunk_ids": [
+        "fb2123ed59a14b9b8153b8af467fb6c6"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_16",
+      "paper_label": "TorchCurves",
+      "question": "论文提到哪种算法用于高效计算B-Spline及其导数？",
+      "answer": "Cox–de Boor算法。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "fb2123ed59a14b9b8153b8af467fb6c6"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_17",
+      "paper_label": "TorchCurves",
+      "question": "作者用哪些库作为数值结果的对照？",
+      "answer": "用SciPy的样条实现和NumPy的Legendre多项式实现进行比较。",
+      "question_type": "experiment",
+      "gold_chunk_ids": [
+        "e0d89cc793614f0f985b81365e2fc201"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_18",
+      "paper_label": "TorchCurves",
+      "question": "TorchCurves的实验主要比较哪两个方面？",
+      "answer": "CPU上Legendre多项式和样条的推理计算速度，以及KAN训练速度与EfficientKAN的比较。",
+      "question_type": "experiment",
+      "gold_chunk_ids": [
+        "d1c01b1086794cfe8d36703049d577cf"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_19",
+      "paper_label": "TorchCurves",
+      "question": "论文在KAN训练速度实验中，每组计时前进行了多少次预热步骤？",
+      "answer": "50次预热步骤。",
+      "question_type": "experiment",
+      "gold_chunk_ids": [
+        "71e242e822dc4146b23f58300095ddea"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "TORCHCURVES_20",
+      "paper_label": "TorchCurves",
+      "question": "作者如何界定TorchCurves的效率主张？",
+      "answer": "作者将效率主张限定为足够快、具有实际使用价值，而非声称在所有场景都达到最优速度。",
+      "question_type": "synthesis",
+      "gold_chunk_ids": [
+        "e0d89cc793614f0f985b81365e2fc201"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_01",
+      "paper_label": "EM-DETR",
+      "question": "论文指出，构建医学影像基础检测模型面临哪些数据问题？",
+      "answer": "医学病灶检测缺少大规模、标准化且标注充分的数据，不同数据集和模态还存在异质性。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "feb93cddb1e8439286a70ea6f71dad67"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_02",
+      "paper_label": "EM-DETR",
+      "question": "论文使用了哪两种医学影像模态？",
+      "answer": "胸部X光（CXR）和乳腺摄影（mammography）。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "784a60aa4d624921a8b436833bdf4641"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_03",
+      "paper_label": "EM-DETR",
+      "question": "论文共使用了多少个图像数据集？",
+      "answer": "四个图像数据集。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "784a60aa4d624921a8b436833bdf4641"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_04",
+      "paper_label": "EM-DETR",
+      "question": "胸片数据集B包含多少张带至少一种异常的训练图像？",
+      "answer": "16,953张。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "7acd4dd6ffbb4967b0ca759573d6706a"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_05",
+      "paper_label": "EM-DETR",
+      "question": "胸片数据集B的图像由谁提供异常框标注？",
+      "answer": "由专家放射科医师小组提供边界框标注。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "7acd4dd6ffbb4967b0ca759573d6706a"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_06",
+      "paper_label": "EM-DETR",
+      "question": "乳腺摄影数据集的阅片标注流程是什么？",
+      "answer": "每次检查由两名放射科医师独立双读，存在分歧时由第三名医师解决。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "0058ccdbaa5f4538bf31b56d0db2885f"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_07",
+      "paper_label": "EM-DETR",
+      "question": "学生-教师训练流程中，第一阶段的Grounding DINO模型做什么？",
+      "answer": "在每个数据集上训练模型，并用其在其他数据集上生成弱标注。",
+      "question_type": "method",
+      "gold_chunk_ids": [
+        "1ae0f796740f4dc299a0f546e701e1f7"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_08",
+      "paper_label": "EM-DETR",
+      "question": "学生-教师流程的第二阶段使用哪些标注训练最终模型？",
+      "answer": "同时使用金标准标注和生成的标注训练最终模型。",
+      "question_type": "method",
+      "gold_chunk_ids": [
+        "1ae0f796740f4dc299a0f546e701e1f7"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_09",
+      "paper_label": "EM-DETR",
+      "question": "为什么医学CXR领域直接合并解剖结构和异常类别可能产生干扰？",
+      "answer": "解剖类别与异常类别并不重叠，但视觉特征相似，可能在训练中相互干扰。",
+      "question_type": "mechanism",
+      "gold_chunk_ids": [
+        "4e5067ff191d4e93a51470ebbd86ff25"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_10",
+      "paper_label": "EM-DETR",
+      "question": "论文采用学生-教师策略希望缓解什么问题？",
+      "answer": "在结合解剖和异常数据集时缓解灾难性遗忘。",
+      "question_type": "method",
+      "gold_chunk_ids": [
+        "4e5067ff191d4e93a51470ebbd86ff25"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_11",
+      "paper_label": "EM-DETR",
+      "question": "EM-DETR为每个类别生成的示例特征如何参与检测？",
+      "answer": "每个类别生成示例特征嵌入，并与文本嵌入交错，供检测编码器/解码器进行交叉注意力。",
+      "question_type": "mechanism",
+      "gold_chunk_ids": [
+        "701f56799ce643c582017d7b0db7e7a3"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_12",
+      "paper_label": "EM-DETR",
+      "question": "EM-DETR的检测引导信息包含哪两类内容？",
+      "answer": "类别特定的示例嵌入和语言信息。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "701f56799ce643c582017d7b0db7e7a3"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_13",
+      "paper_label": "EM-DETR",
+      "question": "EM-FM训练的两个阶段分别是什么？",
+      "answer": "第一阶段利用可用放射学数据预训练检测编码器/解码器；第二阶段利用少量前景/背景标注细化类别特定检测权重。",
+      "question_type": "method",
+      "gold_chunk_ids": [
+        "da3afe514b2d4556bb5180bc664b2a24"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_14",
+      "paper_label": "EM-DETR",
+      "question": "第二阶段的背景标注区域如何生成？",
+      "answer": "从已知正常图像中选择区域，并利用训练数据中已知的病灶位置选择合适背景区域。",
+      "question_type": "method",
+      "gold_chunk_ids": [
+        "373250b02f224191b877a2b229d3d4d3"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_15",
+      "paper_label": "EM-DETR",
+      "question": "表2中EM-FM的平均图像级AUC是多少？",
+      "answer": "0.954。",
+      "question_type": "experiment",
+      "gold_chunk_ids": [
+        "a298b38cc57c4b9f840f184ceae2abbb"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_16",
+      "paper_label": "EM-DETR",
+      "question": "表3中EM-FM在CXR异常检测上的平均mAP50是多少？",
+      "answer": "0.567。",
+      "question_type": "experiment",
+      "gold_chunk_ids": [
+        "9ebc07d759214259bc8cb7d1b3d3d535"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_17",
+      "paper_label": "EM-DETR",
+      "question": "与基线相比，EM-FM在CXR平均mAP50上提高了多少？",
+      "answer": "从0.369提高到0.567，增加0.198，即论文所述约19.9个百分点。",
+      "question_type": "experiment",
+      "gold_chunk_ids": [
+        "3569410668ae466b827d8adbefef581e"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_18",
+      "paper_label": "EM-DETR",
+      "question": "表4中EM-FM在四类CXR发现上的平均敏感度是多少？",
+      "answer": "0.927。",
+      "question_type": "experiment",
+      "gold_chunk_ids": [
+        "d7bc21e7161c4740905b54dcd2791006"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_19",
+      "paper_label": "EM-DETR",
+      "question": "论文指出EM-FM相较基线的训练收敛表现有何变化？",
+      "answer": "EM-FM表现出更快且更稳定的训练收敛。",
+      "question_type": "experiment",
+      "gold_chunk_ids": [
+        "640acf953263410d96493895d9c142c6"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "EMDETR_20",
+      "paper_label": "EM-DETR",
+      "question": "作者提出的后续工作方向是什么？",
+      "answer": "将该方法扩展到更多病灶类别和数据集，以进一步验证其泛化能力。",
+      "question_type": "synthesis",
+      "gold_chunk_ids": [
+        "30fbe279672943539b4fefee1c55986f"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_01",
+      "paper_label": "Legendre",
+      "question": "论文研究的应用背景是什么？",
+      "answer": "在多孔介质油藏中注入活性试剂溶液，以控制化学驱油并推动油相向生产井移动。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "f7f9c9f575ec4d35a8cae78c354090ee"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_02",
+      "paper_label": "Legendre",
+      "question": "Barenblatt模型中的s和c分别表示什么？",
+      "answer": "s表示多孔空间中的水体积浓度（水饱和度），c表示水中活性试剂浓度。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "f655aafeec6641439d57b2f7e297becb"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_03",
+      "paper_label": "Legendre",
+      "question": "Buckley–Leverett函数在论文中记作什么？它依赖哪些变量？",
+      "answer": "记作H=H(s,c)，依赖水饱和度s和试剂浓度c。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "f655aafeec6641439d57b2f7e297becb"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_04",
+      "paper_label": "Legendre",
+      "question": "论文希望确定哪类条件？",
+      "answer": "确定试剂特性函数φ、a和H满足什么条件时，原系统可以获得精确解并通过contactization方法构造一般解。",
+      "question_type": "synthesis",
+      "gold_chunk_ids": [
+        "964e785be713411c88fb42b85421015f",
+        "3af9e307440c47d797de7811560a4252"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_05",
+      "paper_label": "Legendre",
+      "question": "论文将原系统几何化时引入了哪两种微分2-形式？",
+      "answer": "引入ω1和ω2两种微分2-形式。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "ee1255edfa9f414fbf2201ce0ae513ca"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_06",
+      "paper_label": "Legendre",
+      "question": "论文定义的五维流形M使用哪些坐标？",
+      "answer": "坐标为t、x、u、s和c。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "aff8eed18d0d439e97f713383f21dd83"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_07",
+      "paper_label": "Legendre",
+      "question": "论文给出的接触形式κ是什么？",
+      "answer": "κ=du−s dt−c dx。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "ee2443d1e7b24433a4c8a946ff76f744"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_08",
+      "paper_label": "Legendre",
+      "question": "接触分布C如何定义？",
+      "answer": "C=ker κ，即接触形式κ的核。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "ee2443d1e7b24433a4c8a946ff76f744"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_09",
+      "paper_label": "Legendre",
+      "question": "对于论文讨论的双曲系统，算子A满足什么代数关系？",
+      "answer": "A²=1，其特征值为+1和−1。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "97ff7c0cd4e546a2b4c32368833a6fa8"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_10",
+      "paper_label": "Legendre",
+      "question": "系统何时可以通过接触变换等价化为常系数波动系统？",
+      "answer": "当且仅当λ+和λ−都为零，且满足文中所述非退化条件。",
+      "question_type": "method",
+      "gold_chunk_ids": [
+        "6c027dbef995499aad2fcda6efdece28"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_11",
+      "paper_label": "Legendre",
+      "question": "论文将可约化条件表达成什么形式？",
+      "answer": "关于φ(c)、a(c)和H(s,c)三个函数的一个非线性偏微分方程条件。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "3af9e307440c47d797de7811560a4252"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_12",
+      "paper_label": "Legendre",
+      "question": "论文列举的第一类可约化函数H(s,c)是什么形式？",
+      "answer": "H(s,c)=(h1s+h2)r(c)，其中a(c)和φ(c)可以是任意函数。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "3af9e307440c47d797de7811560a4252"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_13",
+      "paper_label": "Legendre",
+      "question": "论文列举的第二类可约化函数H(s,c)是什么形式？",
+      "answer": "H(s,c)=h1s+h2+r(c)，其中a(c)和φ(c)可以是任意函数。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "3af9e307440c47d797de7811560a4252"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_14",
+      "paper_label": "Legendre",
+      "question": "第一种具体情形中，论文对吸附函数a(c)和φ(c)作了什么简化假设？",
+      "answer": "取线性形式a(c)=m1c+m2，φ(c)=n1c+n2。",
+      "question_type": "method",
+      "gold_chunk_ids": [
+        "98b2f7f7d5b3443788bd1f26ac930f88"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_15",
+      "paper_label": "Legendre",
+      "question": "波动方程的Legendre曲面在论文中如何表示？",
+      "answer": "L={u=A(t)+B(x), s=A′(t), c=B′(x)}，其中A和B为任意函数。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "af017e3eb5284d168bab9195110c2551"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_16",
+      "paper_label": "Legendre",
+      "question": "第二种情形中，作者对吸附函数α(p2)和φ(p2)采用了什么设定？",
+      "answer": "设α(p2)=α1p2²，φ(p2)=0。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "98fc00e4ce234591adc76cc6ca3eda70"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_17",
+      "paper_label": "Legendre",
+      "question": "第三种情形中，Buckley–Leverett函数H(p1,p2)采用什么形式？",
+      "answer": "H(p1,p2)=p1 r(p2(p1+1)/p1)，并取a(p2)=m2、φ(p2)=n2。",
+      "question_type": "fact",
+      "gold_chunk_ids": [
+        "ca0b5ef7bc7b43feafd3d15a7f88fe82"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_18",
+      "paper_label": "Legendre",
+      "question": "作者如何验证构造出的解？",
+      "answer": "选择A(x)=x²、B(x)=x²，并验证ω1和ω2在构造曲面S上的限制均为零。",
+      "question_type": "experiment",
+      "gold_chunk_ids": [
+        "77b6c25900b44b7aaa6392ad3c16f5dd"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_19",
+      "paper_label": "Legendre",
+      "question": "论文最终得到哪些主要成果？",
+      "answer": "论文给出了系统接触等价于常系数波动系统的必要充分条件，描述了六类可约化函数，并为其中四种情形构造了接触变换和相应的Legendre曲面解。",
+      "question_type": "synthesis",
+      "gold_chunk_ids": [
+        "77b6c25900b44b7aaa6392ad3c16f5dd"
+      ],
+      "status": "reviewed_against_source_chunk"
+    },
+    {
+      "question_id": "LEGENDRE_20",
+      "paper_label": "Legendre",
+      "question": "论文指出，构造出的解可用于后续什么工作？",
+      "answer": "通过选择初始浓度分布求解Cauchy问题，并对解进行可视化。",
+      "question_type": "synthesis",
+      "gold_chunk_ids": [
+        "f696f22d6c9a4ef0875533854f71b3bb"
+      ],
+      "status": "reviewed_against_source_chunk"
+    }
+  ],
+  "gold_id_validation": "IDs cross-checked against the 138 uploaded chunk records",
+  "status": "reviewed_against_uploaded_source_pending_sqlite_validation"
+}

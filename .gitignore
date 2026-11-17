@@ -1,20 +1,105 @@
-# Python 后端
-venv/
+# Environment & Secrets
+.env
+*.env.local
+backend/.env
+backend/.env.*
+
+# Python
+backend/venv/
 __pycache__/
 *.pyc
+.pytest_cache/
 
-# Node.js 前端
+# Node.js
+frontend/node_modules/
+frontend/.next/
+frontend/tsconfig.tsbuildinfo
+
+# Models & Data
+models/
+backend/data/researchpilot.sqlite3
+backend/data/researchpilot.sqlite3-shm
+backend/data/researchpilot.sqlite3-wal
+
+# OS & Editor
+.DS_Store
+.vscode/
+.idea/
+
+# Runtime data
+uploads/
+backend/uploads/
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+*.log
+
+# Local backups and temporary files
+*.backup*
+*.bak*
+*.tmp
+
+# Runtime user data
+backend/data/
+
+# Global local environments and generated files
+.env
+.env.*
+!.env.example
+venv/
 node_modules/
 .next/
-*.env*
 
-# 环境变量与配置 (重要：防止 API Key 泄露)
-.env
-backend/.env
+# Research experiment generated artifacts
+backend/main.py.diagnostic-*
+backend/tests/cross_paper_eval/**/results/
+backend/tests/retrieval_eval_results/
 
-# 运行时产生的数据与上传文件
-uploads/
+# Extracted paper content and generated chunks
+backend/tests/cross_paper_eval/**/*_chunks.json
+backend/tests/cross_paper_eval/**/*_chunks.jsonl
+backend/tests/cross_paper_eval/**/*_main_text.txt
+backend/tests/cross_paper_eval/**/*_part*.txt
+backend/tests/cross_paper_eval/v6/v6_papers.json
 
-# 系统文件
-.DS_Store
-Thumbs.db
+# Temporary audit and repair scripts
+/check_*.py
+/debug_*.py
+/final_*_audit*.py
+/fix_*.py
+/inspect_*.py
+/reader_debug_full.txt
+/reader_inspect.txt
+/yantu-agent-audit.zip
+/PROJECT_TREE.txt
+
+# Temporary frontend inspection files
+frontend/Reader-Reference-Source.txt
+frontend/reader_full_source.txt
+frontend/reader_visual_audit.txt
+frontend/fix_reader_translation.py
+
+# Local final audit scripts
+/final_e2e_check.py
+/final_safety_check.py
+
+# Unreviewed experiment datasets and intermediate artifacts
+backend/tests/cross_paper_eval/cross_paper_chunks.csv
+backend/tests/cross_paper_eval/cross_paper_eval_dataset_v4_reviewed.json
+backend/tests/cross_paper_eval/cross_paper_eval_dataset_v5.json
+backend/tests/cross_paper_eval/cross_paper_gold_audit_v5_reaudited_*.json
+backend/tests/cross_paper_eval/retrieval_source_inspection.txt
+backend/tests/cross_paper_eval/v6/results_corrected/
+backend/tests/cross_paper_eval/v6/v6_eval_dataset_draft_80q.json
+backend/tests/cross_paper_eval/v6/v6_eval_dataset_reviewed_80q.json
+backend/tests/cross_paper_eval/v8_independent/*chunks*.json
+backend/tests/cross_paper_eval/v8_independent/*source*.txt
+backend/tests/cross_paper_eval/v8_independent/v8_gate_config.json
+backend/tests/cross_paper_eval/v8_independent/v8_gate_evaluation.json
+backend/tests/cross_paper_eval/v8_independent/v8_independent_candidates*.json
+backend/tests/cross_paper_eval/v8_independent/v8_independent_eval_candidate.json
+backend/tests/retrieval_eval_dataset.json
+backend/tests/retrieval_eval_dataset_v2_*.json
+backend/tests/retrieval_eval_dataset_v3_gold_review_en_dedup49_pool38.json

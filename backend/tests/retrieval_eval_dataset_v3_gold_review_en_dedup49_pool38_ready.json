@@ -1,0 +1,503 @@
+{
+  "dataset_name": "attention_is_all_you_need_retrieval_eval_v3_gold_review_english_queries",
+  "version": "1.0-v3-gold-review",
+  "paper": {
+    "paper_id": "11f4d8162178",
+    "title": "Attention Is All You Need",
+    "arxiv_id": "1706.03762",
+    "page_count": 15
+  },
+  "annotation_policy": {
+    "status": "experimental_gold_review_v3",
+    "unit": "chunk",
+    "recall_definition": "Recall@k = retrieved relevant chunks in top-k divided by total relevant chunks for that question.",
+    "mrr_definition": "Mean reciprocal rank of the first relevant chunk.",
+    "averaging": "Macro-average across questions.",
+    "note": "Experimental V3 Gold labels: original Gold IDs plus manually reviewed and approved additions. This is not the finalized official benchmark."
+  },
+  "questions": [
+    {
+      "id": "Q01",
+      "language": "en",
+      "question": "Why can the Transformer rely entirely on attention mechanisms without using recurrent or convolutional structures?",
+      "relevant_chunk_ids": [
+        "f59a131ea38e40bc8a4ba6478a0002de",
+        "fb6e1a632ca54fc483d8ba6cf258b01d",
+        "c5103cab8b7e49e1ab962e15a734971c",
+        "150ea13c6b834e95ae697d11094adf75"
+      ],
+      "topic": "transformer_overview"
+    },
+    {
+      "id": "Q02",
+      "language": "en",
+      "question": "Why is the Transformer more amenable to parallel computation than an RNN?",
+      "relevant_chunk_ids": [
+        "369f81e05946407999bc45edc1fb3363",
+        "fb6e1a632ca54fc483d8ba6cf258b01d",
+        "baf7fa1fd7384514a9ccb2f301fe1743",
+        "f6c0157abf714bc1a8787b7733c7a018"
+      ],
+      "topic": "parallelization"
+    },
+    {
+      "id": "Q03",
+      "language": "en",
+      "question": "What are the respective roles of the Transformer encoder and decoder?",
+      "relevant_chunk_ids": [
+        "7103557b69e345198d8ea7d8f20015d1",
+        "531efb38a4b044678abeb2de249fffa0",
+        "8d2e695d63da4d30a83e0fff1ff6c73a"
+      ],
+      "topic": "encoder_decoder"
+    },
+    {
+      "id": "Q04",
+      "language": "en",
+      "question": "What is self-attention, and how does it establish relationships between different positions within the same sequence?",
+      "relevant_chunk_ids": [
+        "c5103cab8b7e49e1ab962e15a734971c"
+      ],
+      "topic": "self_attention"
+    },
+    {
+      "id": "Q05",
+      "language": "en",
+      "question": "How does scaled dot-product attention compute the attention output from queries, keys, and values?",
+      "relevant_chunk_ids": [
+        "e0167996922245709831728a9435190b",
+        "77743a8b5cac4e02b3423f75a95db4a4"
+      ],
+      "topic": "scaled_dot_product_attention"
+    },
+    {
+      "id": "Q06",
+      "language": "en",
+      "question": "How does multi-head attention combine the outputs of multiple attention heads?",
+      "relevant_chunk_ids": [
+        "77743a8b5cac4e02b3423f75a95db4a4",
+        "1e11d26f952e48c28605e57d98a0251e"
+      ],
+      "topic": "multi_head_attention"
+    },
+    {
+      "id": "Q07",
+      "language": "en",
+      "question": "Why does the Transformer's decoder need a causal mask?",
+      "relevant_chunk_ids": [
+        "8d2e695d63da4d30a83e0fff1ff6c73a",
+        "8b9cbb71a8c747eeb0a8fa2bb553e338"
+      ],
+      "topic": "decoder_masking"
+    },
+    {
+      "id": "Q08",
+      "language": "en",
+      "question": "How does the position-wise feed-forward network work in the Transformer?",
+      "relevant_chunk_ids": [
+        "8b9cbb71a8c747eeb0a8fa2bb553e338"
+      ],
+      "topic": "feed_forward_network"
+    },
+    {
+      "id": "Q09",
+      "language": "en",
+      "question": "Why does the Transformer need positional encoding?",
+      "relevant_chunk_ids": [
+        "f6c0157abf714bc1a8787b7733c7a018"
+      ],
+      "topic": "positional_encoding_purpose"
+    },
+    {
+      "id": "Q10",
+      "language": "en",
+      "question": "What are the sinusoidal positional encoding formulas in the original paper, and what do pos and i represent?",
+      "relevant_chunk_ids": [
+        "f6c0157abf714bc1a8787b7733c7a018",
+        "fe8d7337849b47c1805fb995926672c9"
+      ],
+      "topic": "positional_encoding_formula"
+    },
+    {
+      "id": "Q11",
+      "language": "en",
+      "question": "Why did the original paper suggest that sinusoidal positional encodings could generalize beyond the sequence lengths seen during training?",
+      "relevant_chunk_ids": [
+        "fe8d7337849b47c1805fb995926672c9"
+      ],
+      "topic": "positional_encoding_generalization"
+    },
+    {
+      "id": "Q12",
+      "language": "en",
+      "question": "How do self-attention and recurrent layers differ in the number of sequential operations and maximum path length?",
+      "relevant_chunk_ids": [
+        "baf7fa1fd7384514a9ccb2f301fe1743",
+        "f6c0157abf714bc1a8787b7733c7a018"
+      ],
+      "topic": "complexity_comparison"
+    },
+    {
+      "id": "Q14",
+      "language": "en",
+      "question": "How does scaled dot-product attention calculate its output from queries, keys, and values?",
+      "relevant_chunk_ids": [
+        "e0167996922245709831728a9435190b",
+        "77743a8b5cac4e02b3423f75a95db4a4"
+      ],
+      "topic": "scaled_dot_product_attention"
+    },
+    {
+      "id": "Q15",
+      "language": "en",
+      "question": "How does multi-head attention combine information from multiple attention heads?",
+      "relevant_chunk_ids": [
+        "77743a8b5cac4e02b3423f75a95db4a4",
+        "1e11d26f952e48c28605e57d98a0251e"
+      ],
+      "topic": "multi_head_attention"
+    },
+    {
+      "id": "Q16",
+      "language": "en",
+      "question": "Why did the authors choose sinusoidal positional encodings, and how might they generalize to longer sequences?",
+      "relevant_chunk_ids": [
+        "fe8d7337849b47c1805fb995926672c9"
+      ],
+      "topic": "positional_encoding_generalization"
+    },
+    {
+      "id": "Q17",
+      "language": "en",
+      "topic": "encoder_layer_sublayers",
+      "question": "What are the two sublayers in each Transformer encoder layer?",
+      "relevant_chunk_ids": [
+        "531efb38a4b044678abeb2de249fffa0"
+      ]
+    },
+    {
+      "id": "Q18",
+      "language": "en",
+      "topic": "decoder_additional_sublayer",
+      "question": "Which additional sublayer does the Transformer decoder have compared with the encoder?",
+      "relevant_chunk_ids": [
+        "8d2e695d63da4d30a83e0fff1ff6c73a",
+        "531efb38a4b044678abeb2de249fffa0"
+      ]
+    },
+    {
+      "id": "Q19",
+      "language": "en",
+      "topic": "residual_layer_norm",
+      "question": "How does the Transformer use residual connections and layer normalization around its sublayers?",
+      "relevant_chunk_ids": [
+        "531efb38a4b044678abeb2de249fffa0",
+        "8d2e695d63da4d30a83e0fff1ff6c73a"
+      ]
+    },
+    {
+      "id": "Q20",
+      "language": "en",
+      "topic": "encoder_decoder_attention_sources",
+      "question": "Where do the queries, keys, and values come from in encoder-decoder attention?",
+      "relevant_chunk_ids": [
+        "8b9cbb71a8c747eeb0a8fa2bb553e338"
+      ]
+    },
+    {
+      "id": "Q21",
+      "language": "en",
+      "topic": "encoder_self_attention_sources",
+      "question": "How are queries, keys, and values constructed in the encoder's self-attention?",
+      "relevant_chunk_ids": [
+        "8b9cbb71a8c747eeb0a8fa2bb553e338"
+      ]
+    },
+    {
+      "id": "Q22",
+      "language": "en",
+      "topic": "decoder_causal_mask_implementation",
+      "question": "How does the decoder implement causal masking by setting attention scores for future positions to negative infinity?",
+      "relevant_chunk_ids": [
+        "8b9cbb71a8c747eeb0a8fa2bb553e338"
+      ]
+    },
+    {
+      "id": "Q23",
+      "language": "en",
+      "topic": "attention_scaling_factor",
+      "question": "Why does scaled dot-product attention use √d_k as its scaling factor?",
+      "relevant_chunk_ids": [
+        "e0167996922245709831728a9435190b",
+        "77743a8b5cac4e02b3423f75a95db4a4"
+      ]
+    },
+    {
+      "id": "Q24",
+      "language": "en",
+      "topic": "dot_product_additive_comparison",
+      "question": "How does the paper compare dot-product attention with additive attention?",
+      "relevant_chunk_ids": [
+        "77743a8b5cac4e02b3423f75a95db4a4"
+      ]
+    },
+    {
+      "id": "Q25",
+      "language": "en",
+      "topic": "softmax_gradient_scaling",
+      "question": "Why can large query-key dot products cause the softmax function to have very small gradients?",
+      "relevant_chunk_ids": [
+        "77743a8b5cac4e02b3423f75a95db4a4"
+      ]
+    },
+    {
+      "id": "Q26",
+      "language": "en",
+      "topic": "feed_forward_activation",
+      "question": "Which two linear transformations and which activation function does the position-wise feed-forward network use?",
+      "relevant_chunk_ids": [
+        "8b9cbb71a8c747eeb0a8fa2bb553e338"
+      ]
+    },
+    {
+      "id": "Q27",
+      "language": "en",
+      "topic": "feed_forward_dimensions",
+      "question": "What values of d_model and d_ff does the original paper use for the position-wise feed-forward network?",
+      "relevant_chunk_ids": [
+        "11b126333835495cb5c4af5bd49a2e36",
+        "1fdee5554d15477781411c17c8529739"
+      ]
+    },
+    {
+      "id": "Q28",
+      "language": "en",
+      "topic": "embedding_weight_sharing",
+      "question": "How does the Transformer share weights between the embedding layers and the pre-softmax linear transformation?",
+      "relevant_chunk_ids": [
+        "11b126333835495cb5c4af5bd49a2e36"
+      ]
+    },
+    {
+      "id": "Q29",
+      "language": "en",
+      "topic": "embedding_weight_scaling",
+      "question": "How does the original paper scale the weights in the embedding layers?",
+      "relevant_chunk_ids": [
+        "11b126333835495cb5c4af5bd49a2e36"
+      ]
+    },
+    {
+      "id": "Q30",
+      "language": "en",
+      "topic": "multi_head_configuration",
+      "question": "How many heads does the original multi-head attention use, and what are the key and value dimensions of each head?",
+      "relevant_chunk_ids": [
+        "1e11d26f952e48c28605e57d98a0251e",
+        "e0167996922245709831728a9435190b",
+        "1fdee5554d15477781411c17c8529739"
+      ]
+    },
+    {
+      "id": "Q31",
+      "language": "en",
+      "topic": "attention_applications",
+      "question": "What applications of attention in the Transformer does the paper describe?",
+      "relevant_chunk_ids": [
+        "1e11d26f952e48c28605e57d98a0251e",
+        "8b9cbb71a8c747eeb0a8fa2bb553e338"
+      ]
+    },
+    {
+      "id": "Q32",
+      "language": "en",
+      "topic": "layer_complexity_comparison",
+      "question": "How does the paper compare the computational complexity of self-attention, convolutional layers, and restricted self-attention?",
+      "relevant_chunk_ids": [
+        "f6c0157abf714bc1a8787b7733c7a018"
+      ]
+    },
+    {
+      "id": "Q33",
+      "language": "en",
+      "topic": "restricted_attention_path_length",
+      "question": "How does the neighborhood size r in restricted self-attention affect the maximum path length?",
+      "relevant_chunk_ids": [
+        "66e8ec77b1d74035a7c16c1a67bb30e7"
+      ]
+    },
+    {
+      "id": "Q34",
+      "language": "en",
+      "topic": "sequence_model_evaluation_criteria",
+      "question": "Besides computational complexity, what factors does the paper consider when evaluating sequence models?",
+      "relevant_chunk_ids": [
+        "baf7fa1fd7384514a9ccb2f301fe1743"
+      ]
+    },
+    {
+      "id": "Q35",
+      "language": "en",
+      "topic": "positional_encoding_wavelength",
+      "question": "What range of wavelengths is used by the sinusoidal positional encodings in the original paper?",
+      "relevant_chunk_ids": [
+        "fe8d7337849b47c1805fb995926672c9"
+      ]
+    },
+    {
+      "id": "Q36",
+      "language": "en",
+      "topic": "learned_positional_embedding_comparison",
+      "question": "What difference did the paper observe between learned positional embeddings and sinusoidal positional encodings?",
+      "relevant_chunk_ids": [
+        "ddac9e7062f046eeace66eb268fffda3",
+        "fe8d7337849b47c1805fb995926672c9"
+      ]
+    },
+    {
+      "id": "Q37",
+      "language": "en",
+      "topic": "training_batch_tokens",
+      "question": "Approximately how many source and target tokens were included in each training batch?",
+      "relevant_chunk_ids": [
+        "969ffae4e19d4706bba597eb62916ad6"
+      ]
+    },
+    {
+      "id": "Q38",
+      "language": "en",
+      "topic": "training_hardware_duration",
+      "question": "What GPUs did the paper use to train the Transformer, and how long did the base and big models take to train?",
+      "relevant_chunk_ids": [
+        "969ffae4e19d4706bba597eb62916ad6"
+      ]
+    },
+    {
+      "id": "Q39",
+      "language": "en",
+      "topic": "adam_hyperparameters",
+      "question": "What values of β1, β2, and ε did the paper use for the Adam optimizer?",
+      "relevant_chunk_ids": [
+        "969ffae4e19d4706bba597eb62916ad6"
+      ]
+    },
+    {
+      "id": "Q40",
+      "language": "en",
+      "topic": "learning_rate_warmup",
+      "question": "How many warmup steps were used in the learning-rate schedule?",
+      "relevant_chunk_ids": [
+        "969ffae4e19d4706bba597eb62916ad6"
+      ]
+    },
+    {
+      "id": "Q41",
+      "language": "en",
+      "topic": "label_smoothing_effect",
+      "question": "Why did the paper use label smoothing, and how did it affect perplexity and accuracy?",
+      "relevant_chunk_ids": [
+        "44ab8e12031d4ee7a95a726a21c9a2cb"
+      ]
+    },
+    {
+      "id": "Q42",
+      "language": "en",
+      "topic": "inference_beam_search",
+      "question": "What beam-search configuration did the paper use during machine translation inference?",
+      "relevant_chunk_ids": [
+        "f70a50ed4e7d4a15938e36bcb9929d1b"
+      ]
+    },
+    {
+      "id": "Q43",
+      "language": "en",
+      "topic": "wmt_en_de_bleu",
+      "question": "What BLEU score did Transformer Big achieve on the WMT14 English-to-German translation task?",
+      "relevant_chunk_ids": [
+        "f70a50ed4e7d4a15938e36bcb9929d1b",
+        "44ab8e12031d4ee7a95a726a21c9a2cb",
+        "f59a131ea38e40bc8a4ba6478a0002de"
+      ]
+    },
+    {
+      "id": "Q44",
+      "language": "en",
+      "topic": "wmt_en_fr_dropout",
+      "question": "What dropout rate did the Transformer Big model use for the English-to-French translation task?",
+      "relevant_chunk_ids": [
+        "f70a50ed4e7d4a15938e36bcb9929d1b"
+      ]
+    },
+    {
+      "id": "Q45",
+      "language": "en",
+      "topic": "attention_head_ablation",
+      "question": "How did changes in the number of attention heads and key dimensions affect model performance in the paper's experiments?",
+      "relevant_chunk_ids": [
+        "ddac9e7062f046eeace66eb268fffda3",
+        "1fdee5554d15477781411c17c8529739"
+      ]
+    },
+    {
+      "id": "Q46",
+      "language": "en",
+      "topic": "dropout_overfitting",
+      "question": "How does the paper describe the role of dropout in helping the Transformer avoid overfitting?",
+      "relevant_chunk_ids": [
+        "ddac9e7062f046eeace66eb268fffda3",
+        "44ab8e12031d4ee7a95a726a21c9a2cb"
+      ]
+    },
+    {
+      "id": "Q47",
+      "language": "en",
+      "topic": "constituency_parsing_results",
+      "question": "What F1 results did the Transformer achieve on the Penn Treebank constituency parsing task?",
+      "relevant_chunk_ids": [
+        "1d0c7a7b2dd5465282db7cebd568c7ac"
+      ]
+    },
+    {
+      "id": "Q48",
+      "language": "en",
+      "topic": "transformer_conclusion",
+      "question": "How does the paper summarize the main advantages of the Transformer over traditional recurrent or convolutional models?",
+      "relevant_chunk_ids": [
+        "150ea13c6b834e95ae697d11094adf75"
+      ]
+    },
+    {
+      "id": "Q49",
+      "language": "en",
+      "topic": "future_research_directions",
+      "question": "What possible future research directions for the Transformer does the paper propose?",
+      "relevant_chunk_ids": [
+        "150ea13c6b834e95ae697d11094adf75",
+        "66e8ec77b1d74035a7c16c1a67bb30e7"
+      ]
+    },
+    {
+      "id": "Q50",
+      "language": "en",
+      "topic": "attention_long_distance_visualization",
+      "question": "What do the paper's attention visualizations show about attention heads capturing long-distance dependencies?",
+      "relevant_chunk_ids": [
+        "999e80288997448095cbbaf874792208"
+      ]
+    }
+  ],
+  "query_language": "en",
+  "query_translation_status": "translated_query",
+  "source_dataset": "retrieval_eval_dataset_v2.json",
+  "source_translation_file": "retrieval_eval_translations_v2.json",
+  "gold_revision": {
+    "source_file": "gold_annotation_revision_candidate_v3.json",
+    "source_status": "proposed_not_yet_used_for_evaluation",
+    "revision_version": "3.0",
+    "policy": "Use proposed_gold_ids; preserve all original Gold IDs.",
+    "excluded_question_ids": [
+      "Q13"
+    ],
+    "candidate_pool": "Reused unchanged from the original Pool38 Phase 1 checkpoint."
+  }
+}

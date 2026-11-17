@@ -1,48 +1,56 @@
-import { NextRequest, NextResponse } from 'next/server';
+/**
+ * Same-origin streaming proxy to FastAPI.
+ * Set BACKEND_URL in frontend/.env.local, e.g. http://127.0.0.1:8000.
+ */
+const BACKEND_URL = process.env.BACKEND_URL || "http://127.0.0.1:8000";
 
-const BACKEND_URL = 'http://127.0.0.1:8000';
+async function proxy(
+  request: Request,
+  context: { params: Promise<{ path: string[] }> },
+) {
+  const { path = [] } = await context.params;
+  const safePath = path.map((part) => encodeURIComponent(part)).join("/");
+  const incoming = new URL(request.url);
+  const target = `${BACKEND_URL.replace(/\/$/, "")}/api/${safePath}${incoming.search}`;
 
-async function proxyRequest(req: NextRequest) {
-  const path = req.nextUrl.pathname;
-  const method = req.method;
+  const headers = new Headers();
+  for (const key of ["authorization", "content-type", "accept", "x-request-id"]) {
+    const value = request.headers.get(key);
+    if (value) headers.set(key, value);
+  }
+
+  const method = request.method.toUpperCase();
+  const body = method === "GET" || method === "HEAD" ? undefined : await request.arrayBuffer();
 
   try {
-    const contentType = req.headers.get('content-type') || '';
-    // GET 请求没有 body，其他请求读取 body
-    const body = method !== 'GET' && method !== 'HEAD' ? await req.arrayBuffer() : undefined;
-
-    const res = await fetch(`${BACKEND_URL}${path}`, {
+    const upstream = await fetch(target, {
       method,
-      headers: contentType ? { 'Content-Type': contentType } : {},
-      body: body,
+      headers,
+      body,
+      cache: "no-store",
+      signal: request.signal,
     });
-
-    // 1. 针对流式问答 (SSE) 的特殊处理
-    if (res.headers.get('content-type')?.includes('text/event-stream')) {
-      return new NextResponse(res.body, {
-        status: res.status,
-        headers: { 'Content-Type': 'text/event-stream' },
-      });
+    const responseHeaders = new Headers();
+    for (const key of ["content-type", "cache-control", "content-disposition", "x-request-id"]) {
+      const value = upstream.headers.get(key);
+      if (value) responseHeaders.set(key, value);
     }
-
-    // 2. 统一读取文本并解析为 JSON（无论是成功还是报错，保证前端能拿到 detail）
-    const text = await res.text();
-    let data;
-    try {
-      data = text ? JSON.parse(text) : {};
-    } catch {
-      data = { detail: text };
-    }
-
-    return NextResponse.json(data, { status: res.status });
-
+    // Do not buffer event-stream responses: forward the readable stream directly.
+    responseHeaders.set("X-Accel-Buffering", "no");
+    return new Response(upstream.body, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: responseHeaders,
+    });
   } catch (error) {
-    console.error(`代理 ${method} 请求失败:`, error);
-    return NextResponse.json({ detail: "无法连接到后端服务" }, { status: 502 });
+    console.error("FastAPI proxy error:", error);
+    return Response.json(
+      { detail: "后端服务不可用，请确认 FastAPI 已启动且 BACKEND_URL 配置正确。" },
+      { status: 502 },
+    );
   }
 }
 
-// 导出所有需要的方法
-export async function GET(req: NextRequest) { return proxyRequest(req); }
-export async function POST(req: NextRequest) { return proxyRequest(req); }
-export async function DELETE(req: NextRequest) { return proxyRequest(req); }
+export const GET = proxy;
+export const POST = proxy;
+export const DELETE = proxy;
