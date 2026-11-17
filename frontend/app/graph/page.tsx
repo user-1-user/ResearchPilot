@@ -11,6 +11,18 @@ import { apiFetch } from "@/lib/api";
 type GraphNode = { id: string; name: string; size: number; pagerank?: number; in_degree?: number; out_degree?: number };
 type GraphData = { nodes: GraphNode[]; edges: { source: string; target: string }[]; metrics?: { paper_count?: number; citation_edges?: number; top_foundational_papers?: GraphNode[]; isolated_papers?: string[] } };
 type FutureItem = { paper_id: string; filename: string; future_work: string[]; future_work_evidence?: { page: number; quote: string }[] };
+function escapeHtml(value: unknown): string {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => {
+    const entities: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    };
+    return entities[char];
+  });
+}
 
 export default function GraphPage() {
   const [graph, setGraph] = useState<GraphData | null>(null);
@@ -54,11 +66,32 @@ export default function GraphPage() {
       backgroundColor: 'rgba(15, 23, 42, 0.9)',
       borderColor: '#334155',
       textStyle: { color: '#f8fafc' },
-      formatter: (params: any) => params.dataType === "node"
-        ? `<div class="font-bold text-sm mb-1 text-white">${params.data.name}</div>
-           <div class="text-xs text-slate-300">PageRank: <span class="text-blue-400 font-bold">${(params.data.pagerank ?? 0).toFixed(4)}</span></div>
-           <div class="text-xs text-slate-300">被引频次: <span class="text-green-400 font-bold">${params.data.in_degree ?? 0}</span></div>`
-        : `<div class="text-xs text-slate-300">${params.data.source} → ${params.data.target}</div>`
+      formatter: (params: any) => {
+        const data = params?.data ?? {};
+
+        if (params?.dataType === "node") {
+          const name = escapeHtml(data.name);
+          const pagerank = Number(data.pagerank ?? 0);
+          const inDegree = Number(data.in_degree ?? 0);
+
+          const safePagerank = Number.isFinite(pagerank)
+            ? pagerank.toFixed(4)
+            : "0.0000";
+
+          const safeInDegree = Number.isFinite(inDegree)
+            ? inDegree
+            : 0;
+
+          return `<div class="font-bold text-sm mb-1 text-white">${name}</div>
+            <div class="text-xs text-slate-300">PageRank: <span class="text-blue-400 font-bold">${safePagerank}</span></div>
+            <div class="text-xs text-slate-300">被引频次: <span class="text-green-400 font-bold">${safeInDegree}</span></div>`;
+        }
+
+        const source = escapeHtml(data.source);
+        const target = escapeHtml(data.target);
+
+        return `<div class="text-xs text-slate-300">${source} → ${target}</div>`;
+      }
     },
     animationDuration: 1200,
     animationEasingUpdate: 'quinticInOut',
