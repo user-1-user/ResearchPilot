@@ -16,67 +16,107 @@ type Paper = { id: string; filename: string; page_count: number; pages: Page[]; 
 
 
 
-function renderCitations(
-  text: string,
+
+
+/**
+ * Restore a recognized formula from PDF-extracted plain text.
+ */
+function normalizePdfMath(text: string): string {
+  const formulaPattern =
+    /Attention\s*\(\s*Q\s*,\s*K\s*,\s*V\s*\)\s*=\s*softmax\s*\(\s*Q\s*K\s*T\s*[\s\S]{0,20}?d\s*_?\s*k\s*[\s\S]{0,20}?\)\s*V/gi;
+
+  return text.replace(
+    formulaPattern,
+    () => String.raw`
+
+$$
+\operatorname{Attention}(Q,K,V)
+=
+\operatorname{softmax}
+\left(
+\frac{QK^T}{\sqrt{d_k}}
+\right)V
+$$
+
+`
+  );
+}
+
+/**
+ * Shared renderer for paper text and translations.
+ * Citation links retain the existing reference-jump behavior.
+ */
+function renderPaperMarkdown(
+  originalText: string,
   onReferenceClick: (num: string) => void
 ) {
-  if (!text) return null;
+  if (!originalText) return null;
 
-  const codePattern = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g;
-  const segments = text.split(codePattern);
+  const normalized = normalizePdfMath(originalText);
 
-  return segments.map((segment, segmentIndex) => {
-    if (/^(?:```|~~~|`)/.test(segment)) {
-      return <span key={`code-${segmentIndex}`}>{segment}</span>;
-    }
+  const codePattern =
+    /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g;
 
-    const parts = segment.split(/(\[\d+(?:\s*,\s*\d+)*\])/g);
+  const markdown = normalized
+    .split(codePattern)
+    .map((segment) => {
+      if (/^(?:```|~~~|`)/.test(segment)) {
+        return segment;
+      }
 
-    return (
-      <span key={`segment-${segmentIndex}`}>
-        {parts.map((part, index) => {
-          const match = part.match(/^\[(\d+(?:\s*,\s*\d+)*)\]$/);
+      return segment.replace(
+        /\[(\d+(?:\s*,\s*\d+)*)\](?!\s*\()/g,
+        (_match, numbers: string) =>
+          `[${numbers}](#ref:${numbers.replace(/\s/g, "")})`
+      );
+    })
+    .join("");
 
-          if (!match) {
-            return <span key={index}>{part}</span>;
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeKatex]}
+      components={{
+        a: ({ href, children }) => {
+          const match =
+            typeof href === "string"
+              ? href.match(/^#ref:(\d+(?:,\d+)*)$/)
+              : null;
+
+          if (match) {
+            const numbers = match[1].split(",");
+
+            return (
+              <span>
+                [
+                {numbers.map((num, index) => (
+                  <span key={`${num}-${index}`}>
+                    {index > 0 ? ", " : ""}
+                    <button
+                      type="button"
+                      onClick={() => onReferenceClick(num)}
+                      className="cursor-pointer rounded px-1 font-medium text-blue-600 hover:bg-blue-50 hover:underline"
+                      title={`Jump to reference [${num}]`}
+                    >
+                      {num}
+                    </button>
+                  </span>
+                ))}
+                ]
+              </span>
+            );
           }
 
-          const tokens = match[1].split(/(\s*,\s*)/);
-
-          return (
-            <span key={index}>
-              [
-              {tokens.map((token, tokenIndex) => {
-                if (!/^\d+$/.test(token)) {
-                  return <span key={tokenIndex}>{token}</span>;
-                }
-
-                return (
-                  <span
-                    key={tokenIndex}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onReferenceClick(token)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        onReferenceClick(token);
-                      }
-                    }}
-                    className="cursor-pointer rounded px-1 font-medium text-blue-600 hover:bg-blue-50 hover:underline"
-                    title={`Jump to reference [${token}]`}
-                  >
-                    {token}
-                  </span>
-                );
-              })}
-              ]
-            </span>
-          );
-        })}
-      </span>
-    );
-  });
+          return <a href={href}>{children}</a>;
+        },
+        p: ({ ...props }) => (
+          <p className="my-2 whitespace-pre-wrap" {...props} />
+        ),
+      }}
+    >
+      {markdown}
+    </ReactMarkdown>
+  );
 }
 
 function renderReferences(
@@ -166,7 +206,7 @@ function renderTranslatedContent(
       );
     }
 
-    return renderCitations(text, onReferenceClick);
+    return renderPaperMarkdown(text, onReferenceClick);
   }
 
   const bodyStart = heading.index + heading[0].length;
@@ -174,7 +214,7 @@ function renderTranslatedContent(
   return (
     <>
       {text.slice(0, heading.index)
-        ? renderCitations(text.slice(0, heading.index), onReferenceClick)
+        ? renderPaperMarkdown(text.slice(0, heading.index), onReferenceClick)
         : null}
 
       <div className="mt-4 border-t border-slate-200 pt-3">
@@ -757,7 +797,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
                     {page.text ? (
                       heading && heading.index !== undefined ? (
                         <>
-                          {page.text.slice(0, heading.index) ? renderCitations(page.text.slice(0, heading.index), (num) => jumpToReference(num, 'left')) : null}
+                          {page.text.slice(0, heading.index) ? renderPaperMarkdown(page.text.slice(0, heading.index), (num) => jumpToReference(num, 'left')) : null}
                           <div className="mt-4 border-t border-slate-200 pt-3">
                             <h3 className="text-lg font-bold mb-3">{heading[1]}</h3>
                             {renderReferences(page.text.slice(heading.index + heading[0].length), 'left', page.page, highlightedReference)}
@@ -766,7 +806,7 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
                       ) : isReferencesPage ? (
                         renderReferences(page.text, 'left', page.page, highlightedReference)
                       ) : (
-                        renderCitations(page.text, (num) => jumpToReference(num, 'left'))
+                        renderPaperMarkdown(page.text, (num) => jumpToReference(num, 'left'))
                       )
                     ) : "暂无可显示的文本内容"}
                   </div>
