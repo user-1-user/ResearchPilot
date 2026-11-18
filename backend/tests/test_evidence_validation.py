@@ -105,6 +105,14 @@ class EvidenceValidationTests(unittest.TestCase):
         result = self._semantic_check("insufficient_evidence")
         self.assertFalse(result["valid"])
 
+    def test_semantic_supported_without_evidence_fails(self):
+        result = self._semantic_check("supported", [])
+        self.assertFalse(result["valid"])
+        self.assertEqual(
+            result["claims"][0]["verdict"],
+            "insufficient_evidence",
+        )
+
     def test_semantic_unknown_evidence_id_fails(self):
         result = self._semantic_check("supported", ["E99"])
         self.assertFalse(result["valid"])

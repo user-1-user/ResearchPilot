@@ -934,6 +934,13 @@ export default function ReaderPage({ params }: { params: Promise<{ id: string }>
             ))}
             {answer && (
               <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm leading-7 text-slate-800">
+                {steps.some((step: any) => step.validation && (step.validation.valid === false || step.validation.semantic_support_checked === false)) && (
+                  <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-medium text-amber-900">
+                    {steps.some((step: any) => step.validation?.semantic_support_checked === false)
+                      ? "\u8bed\u4e49\u652f\u6301\u6838\u9a8c\u672a\u5b8c\u6210\uff1a\u5f53\u524d\u65e0\u6cd5\u786e\u8ba4\u7b54\u6848\u5f97\u5230\u539f\u6587\u652f\u6301\uff0c\u8bf7\u8c28\u614e\u4f7f\u7528\u3002"
+                      : "\u7b54\u6848\u672a\u901a\u8fc7\u8bc1\u636e\u9a8c\u8bc1\uff1a\u53ef\u80fd\u5b58\u5728\u672a\u88ab\u539f\u6587\u5145\u5206\u652f\u6301\u7684\u5185\u5bb9\uff0c\u8bf7\u5148\u6838\u5bf9\u9010\u6761\u6838\u9a8c\u7ed3\u679c\u3002"}
+                  </div>
+                )}
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm, remarkMath]}
                   rehypePlugins={[rehypeKatex]}

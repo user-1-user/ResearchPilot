@@ -1327,6 +1327,13 @@ ANSWER TO REVIEW:
                 f"Claim {index + 1} references unknown evidence IDs: {unknown_ids}"
             )
             verdict = "unsupported"
+        elif verdict == "supported" and not any(
+            evidence_id in allowed_ids for evidence_id in evidence_ids
+        ):
+            verdict = "insufficient_evidence"
+            warnings.append(
+                f"Claim {index + 1}: supported verdict rejected because no valid evidence ID was supplied"
+            )
 
         claims.append({
             "claim": claim_text,

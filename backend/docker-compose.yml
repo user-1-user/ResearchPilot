@@ -8,10 +8,14 @@ services:
     environment:
       DATA_DIR: /app/data
       FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:3000}
+      LOCAL_EMBEDDING_MODEL: /models/bge-m3
+      RERANKER_MODEL: /models/bge-reranker-base
     ports:
       - "8000:8000"
     volumes:
       - researchpilot-data:/app/data
+      - "${BGE_M3_HOST_PATH:?Set BGE_M3_HOST_PATH in backend/.env}:/models/bge-m3:ro"
+      - "${RERANKER_HOST_PATH:?Set RERANKER_HOST_PATH in backend/.env}:/models/bge-reranker-base:ro"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
       interval: 30s
