@@ -2286,37 +2286,109 @@ def get_futurework(user: dict = Depends(current_user)):
     return _future_work(user["id"])
 
 
-def _arxiv_search(query: str, max_results: int = 8, sort_by: str = 'relevance') -> list[dict]:
-    import httpx
-    if not query.strip(): query = "cat:cs.AI"
-    url = "https://export.arxiv.org/api/query"
-    search_query = query if re.search(r"\b(?:all|ti|au|abs|cat|co|jr|rn):", query, re.I) else f"all:{query}"
+_ARXIV_REQUEST_LOCK = threading.Lock()
+_ARXIV_LAST_REQUEST_AT = 0.0
 
-    # 增加 User-Agent 伪装，并在遇到 429 时重试一次
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    params = {"search_query": search_query, "start": 0, "max_results": max_results, "sortBy": sort_by, "sortOrder": "descending"}
+
+@lru_cache(maxsize=128)
+def _arxiv_search(query: str, max_results: int = 8, sort_by: str = "relevance") -> list[dict]:
+    import httpx
+
+    global _ARXIV_LAST_REQUEST_AT
+
+    if not query.strip():
+        query = "cat:cs.AI"
+
+    url = "https://export.arxiv.org/api/query"
+    search_query = (
+        query
+        if re.search(r"\b(?:all|ti|au|abs|cat|co|jr|rn):", query, re.I)
+        else f"all:{query}"
+    )
+
+    params = {
+        "search_query": search_query,
+        "start": 0,
+        "max_results": max_results,
+        "sortBy": sort_by,
+        "sortOrder": "descending",
+    }
+    headers = {
+        "User-Agent": "ResearchPilot/2.0 academic literature discovery"
+    }
 
     try:
-        response = httpx.get(url, params=params, headers=headers, timeout=20)
-        response.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 429:
-            import time
-            time.sleep(3) # 被限流后等 3 秒重试
-            response = httpx.get(url, params=params, headers=headers, timeout=20)
+        with _ARXIV_REQUEST_LOCK:
+            wait = 3.0 - (time.monotonic() - _ARXIV_LAST_REQUEST_AT)
+            if wait > 0:
+                time.sleep(wait)
+
+            _ARXIV_LAST_REQUEST_AT = time.monotonic()
+
+            response = httpx.get(
+                url, params=params, headers=headers, timeout=45
+            )
+
+            if response.status_code == 429:
+                retry_after = response.headers.get("Retry-After", "")
+                try:
+                    delay = max(60, min(int(retry_after), 180))
+                except (TypeError, ValueError):
+                    delay = 60
+
+                log.warning("arXiv rate limited; waiting %s seconds", delay)
+                time.sleep(delay)
+
+                _ARXIV_LAST_REQUEST_AT = time.monotonic()
+                response = httpx.get(
+                    url, params=params, headers=headers, timeout=45
+                )
+
             response.raise_for_status()
-        else:
-            raise
+
+    except httpx.TimeoutException as exc:
+        raise RuntimeError("\u0061\u0072\u0058\u0069\u0076 \u8bf7\u6c42\u8d85\u65f6\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002") from exc
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 429:
+            raise RuntimeError(
+                "\u0061\u0072\u0058\u0069\u0076 \u5f53\u524d\u9650\u5236\u4e86\u8bf7\u6c42\u9891\u7387\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002"
+            ) from exc
+        raise RuntimeError(
+            f"arXiv HTTP {exc.response.status_code}"
+        ) from exc
+    except httpx.RequestError as exc:
+        raise RuntimeError(f"Cannot connect to arXiv: {exc}") from exc
+
     root = ET.fromstring(response.text)
     ns = {"a": "http://www.w3.org/2005/Atom"}
     results = []
+
     for entry in root.findall("a:entry", ns):
         paper_url = entry.findtext("a:id", default="", namespaces=ns)
-        title = " ".join(entry.findtext("a:title", default="", namespaces=ns).split())
-        summary = " ".join(entry.findtext("a:summary", default="", namespaces=ns).split())
-        published = entry.findtext("a:published", default="", namespaces=ns)
-        authors = [a.findtext("a:name", default="", namespaces=ns) for a in entry.findall("a:author", ns)]
-        results.append({"id": paper_url.rstrip("/").split("/")[-1], "title": title, "summary": summary, "published": published, "authors": authors, "url": paper_url, "pdf_url": paper_url.replace("/abs/", "/pdf/") + ".pdf"})
+        title = " ".join(
+            entry.findtext("a:title", default="", namespaces=ns).split()
+        )
+        summary = " ".join(
+            entry.findtext("a:summary", default="", namespaces=ns).split()
+        )
+        published = entry.findtext(
+            "a:published", default="", namespaces=ns
+        )
+        authors = [
+            a.findtext("a:name", default="", namespaces=ns)
+            for a in entry.findall("a:author", ns)
+        ]
+
+        results.append({
+            "id": paper_url.rstrip("/").split("/")[-1],
+            "title": title,
+            "summary": summary,
+            "published": published,
+            "authors": authors,
+            "url": paper_url,
+            "pdf_url": paper_url.replace("/abs/", "/pdf/") + ".pdf",
+        })
+
     return results
 
 
