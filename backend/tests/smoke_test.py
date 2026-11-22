@@ -70,8 +70,32 @@ with tempfile.TemporaryDirectory(prefix="researchpilot-test-") as temp_dir:
         paper2_id = up2.json()["paper_id"]
         assert up2.json()["duplicates"], "same arXiv ID should be flagged as a potential version duplicate"
 
+        # ???????????????????????????
+        assert up2.json().get("pending_duplicate") is True
+        assert up2.json().get("chunk_count") == 0
+
+        papers_pending = client.get("/api/papers", headers=auth)
+        assert papers_pending.status_code == 200
+        assert len(papers_pending.json()) == 1, "pending duplicate must be hidden from the library"
+
+        pending_read = client.get(f"/api/papers/{paper2_id}", headers=auth)
+        assert pending_read.status_code == 409, "pending duplicate must not be readable before resolution"
+
+        # ??????????????????????
+        resolution = client.post(
+            f"/api/papers/{paper2_id}/resolve-duplicate",
+            headers=auth,
+            json={"candidate_id": paper_id, "action": "keep_both"},
+        )
+        assert resolution.status_code == 200, resolution.text
+
         papers = client.get("/api/papers", headers=auth)
         assert papers.status_code == 200 and len(papers.json()) == 2
+
+        # ????????????????
+        finalized_read = client.get(f"/api/papers/{paper2_id}", headers=auth)
+        assert finalized_read.status_code == 200, finalized_read.text
+
         paged = client.get(f"/api/papers/{paper_id}?start_page=1&page_size=1", headers=auth)
         assert paged.status_code == 200 and len(paged.json()["pages"]) == 1
         cross_user = client.get(f"/api/papers/{paper_id}", headers=other_auth)

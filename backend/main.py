@@ -10,6 +10,7 @@ registry for the multi-agent orchestrator.
 
 import asyncio
 import difflib
+import gc
 import hashlib
 import hmac
 import json
@@ -61,6 +62,24 @@ except Exception:
     SentenceTransformer = None  # type: ignore
 
 load_dotenv()
+
+# Resource policy for the 16 GB CPU-first target machine.
+# Set these environment variables in backend/.env to override.
+try:
+    import torch
+    _TORCH_THREADS = max(1, int(os.getenv("YANTU_TORCH_THREADS", "4")))
+    _TORCH_INTEROP_THREADS = max(1, int(os.getenv("YANTU_TORCH_INTEROP_THREADS", "2")))
+    torch.set_num_threads(_TORCH_THREADS)
+    try:
+        torch.set_num_interop_threads(_TORCH_INTEROP_THREADS)
+    except RuntimeError:
+        # PyTorch only permits setting inter-op threads before parallel work starts.
+        pass
+except Exception as _torch_config_error:
+    torch = None  # type: ignore
+    _TORCH_THREADS = 0
+    _TORCH_INTEROP_THREADS = 0
+
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 log = logging.getLogger("researchpilot")
 
@@ -77,6 +96,17 @@ for directory in (DATA_DIR, PAPER_DIR, MEDIA_DIR, DB_PATH.parent):
 
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "60"))
 MAX_PDF_PAGES = int(os.getenv("MAX_PDF_PAGES", "1200"))
+
+ENABLE_TABLE_EXTRACTION = os.getenv(
+    "YANTU_ENABLE_TABLE_EXTRACTION", "0"
+).strip().lower() in ("1", "true", "yes", "on")
+
+YANTU_UPLOAD_CONCURRENCY = max(
+    1, int(os.getenv("YANTU_UPLOAD_CONCURRENCY", "1"))
+)
+_UPLOAD_SEMAPHORE = threading.BoundedSemaphore(
+    YANTU_UPLOAD_CONCURRENCY
+)
 CHUNK_CHARS = int(os.getenv("CHUNK_CHARS", "1400"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "180"))
 DEFAULT_TOP_K = int(os.getenv("DEFAULT_TOP_K", "7"))
@@ -519,7 +549,10 @@ def _shingle_similarity(a: str, b: str, width: int = 5) -> float:
     sb = set(tuple(bb[i:i + width]) for i in range(max(1, len(bb) - width + 1)))
     if not sa or not sb:
         return 0.0
-    return len(sa & sb) / max(1, len(sa | sb))
+    small, large = (sa, sb) if len(sa) <= len(sb) else (sb, sa)
+    intersection_count = sum(1 for item in small if item in large)
+    union_count = len(sa) + len(sb) - intersection_count
+    return intersection_count / max(1, union_count)
 
 
 def _get_ocr():
@@ -559,80 +592,186 @@ def _is_valid_heading(line: str) -> bool:
 def _extract_pdf(file_path: Path, original_filename: str = "") -> tuple[list[dict], dict]:
     pages: list[dict] = []
     tables: list[dict] = []
-    doc = fitz.open(file_path)
-    if len(doc) > MAX_PDF_PAGES:
-        doc.close()
-        raise HTTPException(413, f"PDF 页数超过限制（{MAX_PDF_PAGES} 页）")
-    meta = dict(doc.metadata or {})
-    for index, page in enumerate(doc, start=1):
-        text = page.get_text("text") or ""
-        method = "text"
-        quality = min(1.0, len(text.strip()) / 300.0)
-        if len(text.strip()) < 45:
-            engine = _get_ocr()
-            if engine:
-                temp_name = None
+
+    # Always close the PDF, including exceptional exits.
+    with fitz.open(file_path) as doc:
+        if len(doc) > MAX_PDF_PAGES:
+            raise HTTPException(413, f"PDF ???????{MAX_PDF_PAGES} ??")
+
+        meta = dict(doc.metadata or {})
+
+        for index, page in enumerate(doc, start=1):
+            text = page.get_text("text") or ""
+            method = "text"
+            quality = min(1.0, len(text.strip()) / 300.0)
+
+            if len(text.strip()) < 45:
+                engine = _get_ocr()
+                if engine:
+                    temp_name = None
+                    pix = None
+                    result = None
+                    try:
+                        pix = page.get_pixmap(dpi=180, alpha=False)
+
+                        with tempfile.NamedTemporaryFile(
+                            suffix=".png", delete=False
+                        ) as tmp:
+                            temp_name = tmp.name
+
+                        pix.save(temp_name)
+
+                        # Release the rendered page image before OCR inference.
+                        pix = None
+
+                        result, _ = engine(temp_name)
+                        ocr_text = "\n".join(
+                            str(item[1])
+                            for item in (result or [])
+                            if len(item) > 1
+                        )
+
+                        if len(ocr_text.strip()) > len(text.strip()):
+                            text, method = ocr_text, "ocr"
+
+                        quality = min(
+                            1.0, len(text.strip()) / 300.0
+                        ) * (0.78 if method == "ocr" else 1.0)
+
+                    except Exception as exc:
+                        log.warning("OCR failed on page %s: %s", index, exc)
+
+                    finally:
+                        result = None
+                        pix = None
+
+                        if temp_name and os.path.exists(temp_name):
+                            os.remove(temp_name)
+
+            pages.append({
+                "page": index,
+                "text": text,
+                "method": method,
+                "quality": round(quality, 3),
+            })
+
+            # PyMuPDF table extraction is optional and version-dependent.
+            if ENABLE_TABLE_EXTRACTION:
                 try:
-                    pix = page.get_pixmap(dpi=180, alpha=False)
-                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                        temp_name = tmp.name
-                    pix.save(temp_name)
-                    result, _ = engine(temp_name)
-                    ocr_text = "\n".join(str(item[1]) for item in (result or []) if len(item) > 1)
-                    if len(ocr_text.strip()) > len(text.strip()):
-                        text, method = ocr_text, "ocr"
-                    quality = min(1.0, len(text.strip()) / 300.0) * (0.78 if method == "ocr" else 1.0)
-                except Exception as exc:
-                    log.warning("OCR failed on page %s: %s", index, exc)
-                finally:
-                    if temp_name and os.path.exists(temp_name):
-                        os.remove(temp_name)
-        pages.append({"page": index, "text": text, "method": method, "quality": round(quality, 3)})
-        # PyMuPDF table extraction is optional and version-dependent.
-        try:
-            found = page.find_tables()
-            for t_index, table in enumerate(found.tables or []):
-                rows = table.extract()
-                if rows:
-                    tables.append({"page": index, "table_index": t_index, "rows": rows})
-        except Exception:
-            pass
-    doc.close()
+                    found = page.find_tables()
+                    for t_index, table in enumerate(found.tables or []):
+                        rows = table.extract()
+                        if rows:
+                            tables.append({
+                                "page": index,
+                                "table_index": t_index,
+                                "rows": rows,
+                            })
+                except Exception:
+                    pass
 
     first_text = "\n".join(p["text"] for p in pages[:2])
-    whole_text = "\n".join(p["text"] for p in pages)
+
     title = (meta.get("title") or "").strip()
     if not title or title.lower() in {"untitled", "unknown"}:
-        title = next((line.strip() for line in first_text.splitlines() if 12 <= len(line.strip()) <= 180), "未识别标题")
+        title = next(
+            (
+                line.strip()
+                for line in first_text.splitlines()
+                if 12 <= len(line.strip()) <= 180
+            ),
+            "?????",
+        )
+
     doi_match = DOI_RE.search("\n".join(p["text"] for p in pages[:8]))
     arxiv_match = ARXIV_RE.search(original_filename + " " + first_text[:500])
-    abstract_match = re.search(r"(?is)\babstract\b\s*[:\n]?(.{80,2500}?)(?:\n\s*(?:1\.?\s*)?introduction\b|\n\s*keywords\b)", first_text)
-    author_lines = [x.strip() for x in first_text.splitlines()[:25] if "@" in x or re.search(r"\b(university|institute|laboratory|研究院|大学)\b", x, re.I)]
+
+    abstract_match = re.search(
+        r"(?is)\babstract\b\s*[:\n]?(.{80,2500}?)(?:\n\s*(?:1\.?\s*)?introduction\b|\n\s*keywords\b)",
+        first_text,
+    )
+
+    author_lines = [
+        x.strip()
+        for x in first_text.splitlines()[:25]
+        if "@" in x
+        or re.search(
+            r"\b(university|institute|laboratory|\u7814\u7a76\u9662|\u5927\u5b66)\b",
+            x,
+            re.I,
+        )
+    ]
+
     headings = []
     sections = []
-    known_headings = {"abstract", "introduction", "related work", "method", "methods", "experiments", "results", "discussion", "conclusion", "future work", "references", "appendix"}
+
+    known_headings = {
+        "abstract", "introduction", "related work", "method",
+        "methods", "experiments", "results", "discussion",
+        "conclusion", "future work", "references", "appendix",
+    }
+
     for page_item in pages:
         for line in page_item["text"].splitlines():
             value = line.strip()
             if 3 <= len(value) <= 90 and _is_valid_heading(value):
                 if value not in headings:
                     headings.append(value)
+
                 if not any(section["title"] == value for section in sections):
                     number_match = re.match(r"^(\d+(?:\.\d+)*)\s+", value)
-                    level = number_match.group(1).count(".") + 1 if number_match else 1
-                    sections.append({"title": value, "page": page_item["page"], "level": min(level, 4)})
-    references_match = re.search(r"(?is)(?:^|\n)\s*(?:references|bibliography)\s*(?:\n|$)(.*)$", whole_text)
-    references_text = references_match.group(1) if references_match else ""
-    reference_dois = list(dict.fromkeys(x.rstrip(".,;") for x in DOI_RE.findall(references_text)))[:300]
-    reference_entries = [x.strip() for x in re.split(r"\n+", references_text) if len(x.strip()) > 25][:100]
-    figure_captions = [x.strip() for x in whole_text.splitlines() if re.match(r"(?i)^\s*(figure|fig\.)\s+\d+[.:]", x.strip())][:100]
+                    level = (
+                        number_match.group(1).count(".") + 1
+                        if number_match else 1
+                    )
+                    sections.append({
+                        "title": value,
+                        "page": page_item["page"],
+                        "level": min(level, 4),
+                    })
+
+    references_started = False
+    references_parts = []
+    figure_captions = []
+
+    for page_item in pages:
+        for line in page_item["text"].splitlines():
+            value = line.strip()
+
+            if re.match(r"(?i)^\s*(figure|fig\.)\s+\d+[.:]", value):
+                if len(figure_captions) < 100:
+                    figure_captions.append(value)
+
+            if not references_started:
+                if value.lower() in {"references", "bibliography"}:
+                    references_started = True
+                continue
+
+            references_parts.append(line)
+
+    references_text = "\\n".join(references_parts)
+
+    reference_dois = list(dict.fromkeys(
+        x.rstrip(".,;") for x in DOI_RE.findall(references_text)
+    ))[:300]
+
+    reference_entries = [
+        x.strip()
+        for x in re.split(r"\\n+", references_text)
+        if len(x.strip()) > 25
+    ][:100]
+
     metadata = {
         "title": title[:300],
         "author_affiliation_hints": author_lines[:8],
         "abstract": abstract_match.group(1).strip()[:2500] if abstract_match else "",
         "doi": doi_match.group(0).rstrip(".,;") if doi_match else "",
         "arxiv_id": arxiv_match.group(1) if arxiv_match else "",
-        "arxiv_version": int(arxiv_match.group(2)) if arxiv_match and arxiv_match.group(2) else None,
+        "arxiv_version": (
+            int(arxiv_match.group(2))
+            if arxiv_match and arxiv_match.group(2)
+            else None
+        ),
         "headings": headings[:250],
         "sections": sections[:250],
         "reference_dois": reference_dois,
@@ -640,8 +779,11 @@ def _extract_pdf(file_path: Path, original_filename: str = "") -> tuple[list[dic
         "figure_captions": figure_captions,
         "tables": tables[:80],
         "ocr_pages": [p["page"] for p in pages if p["method"] == "ocr"],
-        "low_text_pages": [p["page"] for p in pages if len(p["text"].strip()) < 25],
+        "low_text_pages": [
+            p["page"] for p in pages if len(p["text"].strip()) < 25
+        ],
     }
+
     return pages, metadata
 
 
@@ -728,23 +870,60 @@ def _chunk_pages(pages: list[dict]) -> list[dict]:
 def _get_local_embedding_model():
     global _local_embedding_model
     if _local_embedding_model is None and LOCAL_EMBEDDING_MODEL and SentenceTransformer:
-        _local_embedding_model = SentenceTransformer(LOCAL_EMBEDDING_MODEL)
+        log.info(
+            "Loading local embedding model with torch_threads=%s interop_threads=%s",
+            _TORCH_THREADS, _TORCH_INTEROP_THREADS,
+        )
+        _local_embedding_model = SentenceTransformer(LOCAL_EMBEDDING_MODEL, device="cpu")
     return _local_embedding_model
 
 
 def _embed_texts(texts: list[str]) -> list[list[float]]:
+    """Generate embeddings in bounded outer batches to limit temporary RAM.
+
+    SentenceTransformer's inner batch controls model activation memory; the
+    outer batch bounds the temporary NumPy result array before conversion to
+    Python lists. The persisted vector format remains unchanged.
+    """
     if not texts:
         return []
+
     if embedding_client:
         vectors: list[list[float]] = []
-        for offset in range(0, len(texts), 64):
-            response = embedding_client.embeddings.create(model=EMBEDDING_MODEL, input=texts[offset:offset + 64])
+        for offset in range(0, len(texts), 16):
+            batch_texts = texts[offset:offset + 16]
+            response = embedding_client.embeddings.create(
+                model=EMBEDDING_MODEL, input=batch_texts
+            )
             vectors.extend([item.embedding for item in response.data])
+            del response, batch_texts
         return vectors
+
     model = _get_local_embedding_model()
     if model:
-        arr = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
-        return [row.astype(float).tolist() for row in arr]
+        vectors: list[list[float]] = []
+        total = len(texts)
+        outer_batch_size = 64
+        inner_batch_size = max(1, int(os.getenv("YANTU_EMBED_BATCH_SIZE", "4")))
+        for offset in range(0, total, outer_batch_size):
+            batch_texts = texts[offset:offset + outer_batch_size]
+            arr = model.encode(
+                batch_texts,
+                batch_size=inner_batch_size,
+                normalize_embeddings=True,
+                show_progress_bar=False,
+                convert_to_numpy=True,
+            )
+            vectors.extend(row.tolist() for row in arr)
+            completed = min(offset + len(batch_texts), total)
+            log.info(
+                "[PERF][EMBED] completed=%d/%d outer_batch=%d inner_batch=%d",
+                completed, total, outer_batch_size, inner_batch_size,
+            )
+            del arr, batch_texts
+            gc.collect()
+        return vectors
+
     return []
 
 
@@ -803,7 +982,10 @@ def _load_user_chunks(user_id: str, paper_ids: Optional[list[str]] = None) -> li
             FROM chunks c JOIN papers p ON p.id=c.paper_id
             WHERE {where}
         """, params).fetchall()
-    return [dict(r) for r in rows]
+    return [
+        dict(r) for r in rows
+        if not _metadata_is_pending(r["metadata_json"])
+    ]
 
 
 def retrieve(user_id: str, query: str, paper_ids: Optional[list[str]] = None, top_k: int = DEFAULT_TOP_K, force_return: bool = False, rerank_query: Optional[str] = None) -> list[dict]:
@@ -1110,22 +1292,38 @@ def rebuild_embeddings(user: dict = Depends(current_user)):
 # -----------------------------------------------------------------------------
 # Common paper helpers
 # -----------------------------------------------------------------------------
+def _metadata_is_pending(metadata_json: str | None) -> bool:
+    try:
+        return json.loads(metadata_json or "{}").get("index_status") == "pending_duplicate"
+    except Exception:
+        return False
+
+
+def _paper_is_pending(paper: dict) -> bool:
+    return _metadata_is_pending(paper.get("metadata_json"))
+
+
 def _paper_rows(user_id: str) -> list[dict]:
     with db() as conn:
         rows = conn.execute("SELECT id,filename,page_count,metadata_json,created_at FROM papers WHERE user_id=? ORDER BY created_at DESC", (user_id,)).fetchall()
     result = []
     for row in rows:
+        if _metadata_is_pending(row["metadata_json"]):
+            continue
         metadata = json.loads(row["metadata_json"] or "{}")
         result.append({"id": row["id"], "filename": row["filename"], "page_count": row["page_count"], "title": metadata.get("title", ""), "created_at": row["created_at"]})
     return result
 
 
-def _get_paper(user_id: str, paper_id: str) -> dict:
+def _get_paper(user_id: str, paper_id: str, allow_pending: bool = False) -> dict:
     with db() as conn:
         row = conn.execute("SELECT * FROM papers WHERE id=? AND user_id=?", (paper_id, user_id)).fetchone()
     if not row:
         raise HTTPException(404, "论文不存在")
-    return dict(row)
+    paper = dict(row)
+    if not allow_pending and _paper_is_pending(paper):
+        raise HTTPException(409, "该论文正在等待重复版本确认，暂不可用于阅读、检索或分析")
+    return paper
 
 
 def validate_evidence_sources(sources: list[dict]) -> dict:
@@ -1402,19 +1600,27 @@ def health():
 
 
 
-def _upload_bytes(user: dict, filename: str, content: bytes) -> dict:
+def _upload_staged_file_locked(
+    user: dict,
+    filename: str,
+    staged_path: Path,
+    sha: str,
+    size: int,
+    defer_duplicate_index: bool = False,
+) -> dict:
     if not filename.lower().endswith(".pdf"):
-        raise HTTPException(415, "仅支持 PDF 文件")
+        raise HTTPException(415, "??? PDF ??")
 
-    if not content or len(content) > MAX_UPLOAD_MB * 1024 * 1024:
-        raise HTTPException(413, f"文件为空或超过 {MAX_UPLOAD_MB} MB")
+    if not size or size > MAX_UPLOAD_MB * 1024 * 1024:
+        raise HTTPException(413, f"??????? {MAX_UPLOAD_MB} MB")
 
-    if not content.startswith(b"%PDF"):
-        raise HTTPException(415, "文件内容不是有效 PDF")
+    if not staged_path.is_file():
+        raise HTTPException(400, "?????????")
 
-    sha = hashlib.sha256(content).hexdigest()
+    with staged_path.open("rb") as staged_file:
+        if staged_file.read(4) != b"%PDF":
+            raise HTTPException(415, "???????? PDF")
 
-    # 先进行 SHA256 精确重复检测。
     with db() as conn:
         exact = conn.execute(
             """
@@ -1447,7 +1653,7 @@ def _upload_bytes(user: dict, filename: str, content: bytes) -> dict:
 
     try:
         # 1. 保存 PDF 文件。
-        path.write_bytes(content)
+        os.replace(staged_path, path)
 
         # 2. 提取 PDF 文本和元数据，保留原有 OCR 逻辑。
         _pdf_started = time.perf_counter()
@@ -1468,90 +1674,111 @@ def _upload_bytes(user: dict, filename: str, content: bytes) -> dict:
 
         # 3. 检查与现有论文的相似度和 arXiv 版本。
         _dedup_started = time.perf_counter()
+        duplicates = []
+        candidate_count = 0
         with db() as conn:
-            candidates = conn.execute(
+            candidate_cursor = conn.execute(
                 """
                 SELECT id, filename, full_text, metadata_json
                 FROM papers
                 WHERE user_id=?
                 """,
                 (user["id"],),
-            ).fetchall()
-
-        duplicates = []
-
-        for old in candidates:
-            old_meta = json.loads(old["metadata_json"] or "{}")
-
-            same_arxiv = bool(
-                metadata.get("arxiv_id")
-                and metadata.get("arxiv_id") == old_meta.get("arxiv_id")
             )
 
-            ratio = _shingle_similarity(
-                full_text,
-                old["full_text"],
-            )
+            for old in candidate_cursor:
+                candidate_count += 1
+                if _metadata_is_pending(old["metadata_json"]):
+                    continue
+                old_meta = json.loads(old["metadata_json"] or "{}")
 
-            # 即使 arXiv ID 相同，文本相似度也至少要有 10% (0.1) 才能算同一篇论文。
-            # 防止正文里“提及”了某个 ID 就被误判。
-            is_same_paper = (same_arxiv and ratio >= 0.10) or (ratio >= 0.18)
-
-            if is_same_paper:
-                old_version = old_meta.get("arxiv_version") or 0
-                new_version = metadata.get("arxiv_version") or 0
-
-                if same_arxiv and ratio >= 0.10:
-                    suggestion = "检测到同一 arXiv 论文的不同版本"
-                else:
-                    suggestion = "正文语义片段高度相似，建议核对版本"
-
-                if same_arxiv and old_version > new_version:
-                    suggestion += "；知识库现有版本更新，建议保留现有版本"
-                elif same_arxiv and new_version > old_version:
-                    suggestion += "；新上传版本更新，可考虑替换旧版本"
-
-                # 只有真正判定为同一篇论文，才计算高相似度
-                calc_sim = ratio if ratio > 0 else 0.0
-                if same_arxiv and ratio >= 0.10:
-                    calc_sim = max(calc_sim, 0.99)
-
-                duplicates.append(
-                    {
-                        "paper_id": old["id"],
-                        "filename": old["filename"],
-                        "similarity": round(calc_sim, 3),
-                        "suggestion": suggestion,
-                        "existing_version": old_version,
-                        "uploaded_version": new_version,
-                    }
+                same_arxiv = bool(
+                    metadata.get("arxiv_id")
+                    and metadata.get("arxiv_id") == old_meta.get("arxiv_id")
                 )
+
+                ratio = _shingle_similarity(
+                    full_text,
+                    old["full_text"],
+                )
+
+                # 即使 arXiv ID 相同，文本相似度也至少要有 10% (0.1) 才能算同一篇论文。
+                # 防止正文里“提及”了某个 ID 就被误判。
+                is_same_paper = (same_arxiv and ratio >= 0.10) or (ratio >= 0.18)
+
+                if is_same_paper:
+                    old_version = old_meta.get("arxiv_version") or 0
+                    new_version = metadata.get("arxiv_version") or 0
+
+                    if same_arxiv and ratio >= 0.10:
+                        suggestion = "检测到同一 arXiv 论文的不同版本"
+                    else:
+                        suggestion = "正文语义片段高度相似，建议核对版本"
+
+                    if same_arxiv and old_version > new_version:
+                        suggestion += "；知识库现有版本更新，建议保留现有版本"
+                    elif same_arxiv and new_version > old_version:
+                        suggestion += "；新上传版本更新，可考虑替换旧版本"
+
+                    # 只有真正判定为同一篇论文，才计算高相似度
+                    calc_sim = ratio if ratio > 0 else 0.0
+                    if same_arxiv and ratio >= 0.10:
+                        calc_sim = max(calc_sim, 0.99)
+
+                    duplicates.append(
+                        {
+                            "paper_id": old["id"],
+                            "filename": old["filename"],
+                            "similarity": round(calc_sim, 3),
+                            "suggestion": suggestion,
+                            "existing_version": old_version,
+                            "uploaded_version": new_version,
+                        }
+                    )
 
         # 4. 先生成 chunks 和向量。
         #    Embedding 计算放在数据库事务之外，避免长时间占用写锁。
         log.info(
             "[PERF][UPLOAD] dedup=%.2fs existing_papers=%d duplicates=%d",
             time.perf_counter() - _dedup_started,
-            len(candidates),
+            candidate_count,
             len(duplicates),
         )
 
-        _chunk_started = time.perf_counter()
-        chunks = _chunk_pages(pages)
-        log.info(
-            "[PERF][UPLOAD] chunking=%.2fs chunks=%d",
-            time.perf_counter() - _chunk_started,
-            len(chunks),
-        )
+        pending_duplicate = bool(defer_duplicate_index and duplicates)
+        if pending_duplicate:
+            chunks, vectors = [], []
+            log.info("[PERF][UPLOAD] duplicate_pending=1; chunking and embedding deferred")
+        else:
+            _chunk_started = time.perf_counter()
+            chunks = _chunk_pages(pages)
+            log.info(
+                "[PERF][UPLOAD] chunking=%.2fs chunks=%d",
+                time.perf_counter() - _chunk_started,
+                len(chunks),
+            )
+            _embedding_started = time.perf_counter()
+            vectors = _prepare_chunk_vectors(chunks)
+            log.info(
+                "[PERF][UPLOAD] embedding=%.2fs chunks=%d vectors=%d",
+                time.perf_counter() - _embedding_started,
+                len(chunks),
+                len(vectors),
+            )
+        try:
+            import psutil
+            _process = psutil.Process(os.getpid())
+            log.info(
+                "[PERF][MEMORY] after_embedding rss_mb=%.1f private_mb=%.1f",
+                _process.memory_info().rss / (1024 * 1024),
+                _process.memory_info().private / (1024 * 1024),
+            )
+        except Exception:
+            pass
 
-        _embedding_started = time.perf_counter()
-        vectors = _prepare_chunk_vectors(chunks)
-        log.info(
-            "[PERF][UPLOAD] embedding=%.2fs chunks=%d vectors=%d",
-            time.perf_counter() - _embedding_started,
-            len(chunks),
-            len(vectors),
-        )
+        stored_metadata = dict(metadata)
+        if pending_duplicate:
+            stored_metadata["index_status"] = "pending_duplicate"
 
         # 5. 提前组装响应内容，避免数据库提交后再执行复杂处理。
         result = {
@@ -1560,6 +1787,7 @@ def _upload_bytes(user: dict, filename: str, content: bytes) -> dict:
             "page_count": len(pages),
             "duplicates": duplicates,
             "metadata": metadata,
+            "pending_duplicate": pending_duplicate,
             "chunk_count": len(chunks),
             "warnings": (
                 [f"OCR 处理了 {len(metadata['ocr_pages'])} 页"]
@@ -1593,7 +1821,7 @@ def _upload_bytes(user: dict, filename: str, content: bytes) -> dict:
                     sha,
                     full_text,
                     len(pages),
-                    json.dumps(metadata, ensure_ascii=False),
+                    json.dumps(stored_metadata, ensure_ascii=False),
                     _iso(_now()),
                 ),
             )
@@ -1676,27 +1904,174 @@ def list_papers(user: dict = Depends(current_user)):
     return _paper_rows(user["id"])
 
 
+
+
+def _remove_staged_upload(staged_path: Optional[Path]) -> None:
+    if staged_path is None:
+        return
+    try:
+        staged_path.unlink(missing_ok=True)
+    except OSError:
+        log.exception("Failed to remove staged upload: %s", staged_path)
+
+
+def _upload_staged_file(
+    user: dict,
+    filename: str,
+    staged_path: Path,
+    sha: str,
+    size: int,
+    defer_duplicate_index: bool = False,
+) -> dict:
+    try:
+        with _UPLOAD_SEMAPHORE:
+            return _upload_staged_file_locked(
+                user, filename, staged_path, sha, size,
+                defer_duplicate_index=defer_duplicate_index,
+            )
+    finally:
+        _remove_staged_upload(staged_path)
+
+
+def _upload_bytes(user: dict, filename: str, content: bytes) -> dict:
+    """???????????????"""
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(415, "??? PDF ??")
+
+    if not content or len(content) > MAX_UPLOAD_MB * 1024 * 1024:
+        raise HTTPException(413, f"??????? {MAX_UPLOAD_MB} MB")
+
+    sha = hashlib.sha256(content).hexdigest()
+    staged_path = None
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix=".upload-compat-",
+            suffix=".part",
+            dir=PAPER_DIR,
+            delete=False,
+        ) as tmp:
+            staged_path = Path(tmp.name)
+            tmp.write(content)
+
+        return _upload_staged_file(
+            user, filename, staged_path, sha, len(content)
+        )
+    finally:
+        _remove_staged_upload(staged_path)
+
+
+async def _stage_upload_file(
+    file: UploadFile,
+) -> tuple[Path, str, int]:
+    """???????????????? SHA256?"""
+    filename = file.filename or "upload.pdf"
+
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(415, "??? PDF ??")
+
+    staged_path = None
+    digest = hashlib.sha256()
+    prefix = bytearray()
+    total_size = 0
+    max_bytes = MAX_UPLOAD_MB * 1024 * 1024
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix=".upload-",
+            suffix=".part",
+            dir=PAPER_DIR,
+            delete=False,
+        ) as tmp:
+            staged_path = Path(tmp.name)
+
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+
+                total_size += len(chunk)
+                if total_size > max_bytes:
+                    raise HTTPException(
+                        413, f"???? {MAX_UPLOAD_MB} MB"
+                    )
+
+                if len(prefix) < 4:
+                    prefix.extend(chunk[:4 - len(prefix)])
+
+                digest.update(chunk)
+                tmp.write(chunk)
+
+        if total_size == 0:
+            raise HTTPException(413, "????")
+
+        if bytes(prefix) != b"%PDF":
+            raise HTTPException(415, "???????? PDF")
+
+        return staged_path, digest.hexdigest(), total_size
+
+    except BaseException:
+        _remove_staged_upload(staged_path)
+        raise
+
+
 @app.post("/api/papers/upload")
-async def upload_paper(file: UploadFile = File(...), user: dict = Depends(current_user)):
-    content = await file.read()
-    # PDF parsing/OCR is CPU-bound; offload it so the ASGI event loop can keep
-    # serving other requests while a 500+ page document is being indexed.
-    return await run_in_threadpool(_upload_bytes, user, file.filename or "upload.pdf", content)
+async def upload_paper(
+    file: UploadFile = File(...),
+    user: dict = Depends(current_user),
+):
+    staged_path = None
+    try:
+        staged_path, sha, size = await _stage_upload_file(file)
+        return await run_in_threadpool(
+            _upload_staged_file,
+            user,
+            file.filename or "upload.pdf",
+            staged_path,
+            sha,
+            size,
+            True,
+        )
+    finally:
+        await file.close()
+        _remove_staged_upload(staged_path)
 
 
 @app.post("/api/papers/upload-batch")
-async def upload_batch(files: list[UploadFile] = File(...), user: dict = Depends(current_user)):
+async def upload_batch(
+    files: list[UploadFile] = File(...),
+    user: dict = Depends(current_user),
+):
     if len(files) > 30:
-        raise HTTPException(413, "单次最多上传 30 篇论文")
+        raise HTTPException(413, "?????? 30 ???")
+
     results = []
     for file in files:
+        staged_path = None
         try:
-            content = await file.read()
-            result = await run_in_threadpool(_upload_bytes, user, file.filename or "upload.pdf", content)
+            staged_path, sha, size = await _stage_upload_file(file)
+            result = await run_in_threadpool(
+                _upload_staged_file,
+                user,
+                file.filename or "upload.pdf",
+                staged_path,
+                sha,
+                size,
+                True,
+            )
             results.append({"ok": True, **result})
         except HTTPException as exc:
-            results.append({"ok": False, "filename": file.filename, "error": exc.detail})
+            results.append({
+                "ok": False,
+                "filename": file.filename,
+                "error": exc.detail,
+            })
+        finally:
+            await file.close()
+            _remove_staged_upload(staged_path)
+
     return {"items": results}
+
 
 
 @app.get("/api/papers/{paper_id}")
@@ -1742,13 +2117,84 @@ def get_paper_outline(paper_id: str, user: dict = Depends(current_user)):
 
 @app.delete("/api/papers/{paper_id}")
 def delete_paper(paper_id: str, user: dict = Depends(current_user)):
-    paper = _get_paper(user["id"], paper_id)
+    paper = _get_paper(user["id"], paper_id, allow_pending=True)
     with db() as conn:
         conn.execute("DELETE FROM papers WHERE id=? AND user_id=?", (paper_id, user["id"]))
     path = Path(paper["file_path"])
-    if path.exists(): path.unlink()
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        log.exception(
+            "Paper deleted from database, but PDF cleanup failed: paper_id=%s path=%s",
+            paper_id,
+            path,
+        )
     return {"message": "删除成功"}
 
+
+
+
+def _finalize_pending_paper(user_id: str, paper_id: str) -> dict:
+    """Build the index for a user-confirmed paper version."""
+    with db() as conn:
+        row = conn.execute(
+            "SELECT metadata_json FROM papers WHERE id=? AND user_id=?",
+            (paper_id, user_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "????????")
+        metadata = json.loads(row["metadata_json"] or "{}")
+        if metadata.get("index_status") != "pending_duplicate":
+            return {"paper_id": paper_id, "already_finalized": True}
+
+        page_count = conn.execute(
+            "SELECT COUNT(*) FROM pages WHERE paper_id=?", (paper_id,)
+        ).fetchone()[0]
+
+        page_cursor = conn.execute(
+            "SELECT page_no, text FROM pages WHERE paper_id=? ORDER BY page_no",
+            (paper_id,),
+        )
+        chunks = _chunk_pages(
+            {"page": page_row["page_no"], "text": page_row["text"]}
+            for page_row in page_cursor
+        )
+
+    # Embedding remains outside the SQLite write transaction.
+    with _UPLOAD_SEMAPHORE:
+        vectors = _prepare_chunk_vectors(chunks)
+
+    with db() as conn:
+        row = conn.execute(
+            "SELECT metadata_json FROM papers WHERE id=? AND user_id=?",
+            (paper_id, user_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "????????")
+        metadata = json.loads(row["metadata_json"] or "{}")
+        if metadata.get("index_status") != "pending_duplicate":
+            return {"paper_id": paper_id, "already_finalized": True}
+        count = conn.execute(
+            "SELECT COUNT(*) FROM chunks WHERE paper_id=?", (paper_id,)
+        ).fetchone()[0]
+        if count:
+            raise HTTPException(409, "????????????????????")
+        _index_chunks(user_id, paper_id, chunks, conn=conn, vectors=vectors)
+        metadata.pop("index_status", None)
+        conn.execute(
+            "UPDATE papers SET metadata_json=? WHERE id=? AND user_id=?",
+            (json.dumps(metadata, ensure_ascii=False), paper_id, user_id),
+        )
+
+    log.info(
+        "[PERF][DUPLICATE_FINALIZE] paper_id=%s pages=%d chunks=%d vectors=%d",
+        paper_id, page_count, len(chunks), len(vectors),
+    )
+    return {
+        "paper_id": paper_id,
+        "chunk_count": len(chunks),
+        "vector_count": len(vectors),
+    }
 
 @app.post("/api/papers/{paper_id}/resolve-duplicate")
 def resolve_duplicate(paper_id: str, payload: dict, user: dict = Depends(current_user)):
@@ -1756,24 +2202,33 @@ def resolve_duplicate(paper_id: str, payload: dict, user: dict = Depends(current
     action = str(payload.get("action", "keep_both"))
     if action not in {"keep_new", "keep_existing", "keep_both"}:
         raise HTTPException(400, "action 仅支持 keep_new / keep_existing / keep_both")
-    new_paper = _get_paper(user["id"], paper_id)
+    new_paper = _get_paper(user["id"], paper_id, allow_pending=True)
     old_paper = _get_paper(user["id"], candidate_id)
-    if action == "keep_new":
-        with db() as conn: conn.execute("DELETE FROM papers WHERE id=?", (candidate_id,))
-        old_path = Path(old_paper["file_path"])
-        if old_path.exists(): old_path.unlink()
-        return {"message": "已保留新版本", "kept": paper_id}
     if action == "keep_existing":
-        with db() as conn: conn.execute("DELETE FROM papers WHERE id=?", (paper_id,))
-        new_path = Path(new_paper["file_path"])
-        if new_path.exists(): new_path.unlink()
+        with db() as conn:
+            conn.execute("DELETE FROM papers WHERE id=? AND user_id=?", (paper_id, user["id"]))
+        try:
+            Path(new_paper["file_path"]).unlink(missing_ok=True)
+        except OSError:
+            log.exception("Failed to remove rejected duplicate PDF: %s", new_paper["file_path"])
         return {"message": "已保留知识库原版本", "kept": candidate_id}
-    return {"message": "已保留两个版本", "kept": [paper_id, candidate_id]}
+
+    # 新版本索引成功后，才允许替换或同时保留。
+    _finalize_pending_paper(user["id"], paper_id)
+    if action == "keep_new":
+        with db() as conn:
+            conn.execute("DELETE FROM papers WHERE id=? AND user_id=?", (candidate_id, user["id"]))
+        try:
+            Path(old_paper["file_path"]).unlink(missing_ok=True)
+        except OSError:
+            log.exception("Failed to remove replaced PDF: %s", old_paper["file_path"])
+        return {"message": "已建立新版本索引并保留新版本", "kept": paper_id}
+    return {"message": "已建立新版本索引并保留两个版本", "kept": [paper_id, candidate_id]}
 
 
 @app.get("/api/papers/{paper_id}/diff/{candidate_id}")
 def compare_paper_versions(paper_id: str, candidate_id: str, user: dict = Depends(current_user)):
-    new_paper = _get_paper(user["id"], paper_id)
+    new_paper = _get_paper(user["id"], paper_id, allow_pending=True)
     old_paper = _get_paper(user["id"], candidate_id)
     old_lines = old_paper["full_text"].splitlines()
     new_lines = new_paper["full_text"].splitlines()
@@ -2121,7 +2576,7 @@ def _build_graph_data(user_id: str) -> dict:
     papers = []
     with db() as conn:
         rows = conn.execute("SELECT id,filename,full_text,metadata_json,page_count FROM papers WHERE user_id=?", (user_id,)).fetchall()
-    papers = [dict(r) for r in rows]
+    papers = [dict(r) for r in rows if not _metadata_is_pending(r["metadata_json"])]
     graph = nx.DiGraph()
     for p in papers:
         metadata = json.loads(p["metadata_json"] or "{}")
@@ -2201,10 +2656,12 @@ def _future_work(user_id: str) -> dict:
             (user_id,),
         ).fetchall()
 
-    papers = [dict(r) for r in rows]
+    papers = [dict(r) for r in rows if not _metadata_is_pending(r["metadata_json"])]
+    active_ids = {p["id"] for p in papers}
     pages_by_paper = {}
     for row in page_rows:
-        pages_by_paper.setdefault(row["paper_id"], []).append(row)
+        if row["paper_id"] in active_ids:
+            pages_by_paper.setdefault(row["paper_id"], []).append(row)
     if not papers:
         return {"items": [], "summary": "文献库为空。"}
 
@@ -3036,10 +3493,20 @@ STRICT RULES:
 
 def _tool_library_stats(user_id: str) -> dict:
     with db() as conn:
-        paper_count = conn.execute("SELECT COUNT(*) FROM papers WHERE user_id=?", (user_id,)).fetchone()[0]
-        page_count = conn.execute("SELECT COALESCE(SUM(page_count),0) FROM papers WHERE user_id=?", (user_id,)).fetchone()[0]
-        chunk_count = conn.execute("SELECT COUNT(*) FROM chunks c JOIN papers p ON p.id=c.paper_id WHERE p.user_id=?", (user_id,)).fetchone()[0]
-    return {"paper_count": paper_count, "page_count": page_count, "chunk_count": chunk_count}
+        rows = conn.execute(
+            "SELECT id, page_count, metadata_json FROM papers WHERE user_id=?", (user_id,)
+        ).fetchall()
+        active = [r for r in rows if not _metadata_is_pending(r["metadata_json"])]
+        ids = [r["id"] for r in active]
+        page_count = sum(int(r["page_count"] or 0) for r in active)
+        if ids:
+            marks = ",".join("?" for _ in ids)
+            chunk_count = conn.execute(
+                f"SELECT COUNT(*) FROM chunks WHERE paper_id IN ({marks})", ids
+            ).fetchone()[0]
+        else:
+            chunk_count = 0
+    return {"paper_count": len(active), "page_count": page_count, "chunk_count": chunk_count}
 
 
 def _run_tool(user_id: str, tool: str, args: dict) -> dict:
