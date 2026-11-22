@@ -103,3 +103,14 @@ backend/tests/cross_paper_eval/v8_independent/v8_independent_eval_candidate.json
 backend/tests/retrieval_eval_dataset.json
 backend/tests/retrieval_eval_dataset_v2_*.json
 backend/tests/retrieval_eval_dataset_v3_gold_review_en_dedup49_pool38.json
+
+# Local development backups and diagnostics (never submit)
+backend/backups/
+backend/diagnostics/
+backend/*.before-*
+backend/*_source.txt
+backend/extract_pdf_current.txt
+backend/upload_test_pdf.py
+/frontend/app/api/route.ts.before-*
+/frontend/app/layout.tsx.before-*
+/patch_deferred_duplicate_index.py
