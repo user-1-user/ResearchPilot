@@ -1124,7 +1124,13 @@ def retrieve(user_id: str, query: str, paper_ids: Optional[list[str]] = None, to
     rerank_score_by_index: dict[int, float] = {}
 
     _reranker_started = time.perf_counter()
+    _reranker_load_started = time.perf_counter()
     reranker = _get_reranker() if ENABLE_RERANKER else None
+    log.info(
+        "[PERF][RERANKER] load_or_get=%.2fs loaded=%s",
+        time.perf_counter() - _reranker_load_started,
+        bool(reranker),
+    )
 
     if reranker and candidate_indices:
         try:
@@ -1139,10 +1145,16 @@ def retrieve(user_id: str, query: str, paper_ids: Optional[list[str]] = None, to
 
             # Keep raw logits for a more readable score range.
             # Disable progress output to keep backend logs clean.
+            _reranker_predict_started = time.perf_counter()
             rerank_scores = reranker.predict(
                 pairs,
                 show_progress_bar=False,
                 activation_fn=torch.nn.Identity(),
+            )
+            log.info(
+                "[PERF][RERANKER] predict=%.2fs candidates=%d",
+                time.perf_counter() - _reranker_predict_started,
+                len(candidate_indices),
             )
 
             if len(rerank_scores) != len(candidate_indices):
