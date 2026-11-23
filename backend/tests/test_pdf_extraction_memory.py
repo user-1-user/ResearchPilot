@@ -175,3 +175,44 @@ def test_shingle_similarity_preserves_results(
     actual = pdf_main._shingle_similarity(text_a, text_b)
     assert actual == pytest.approx(expected)
 
+
+def test_pdf_extraction_joins_multiline_title(pdf_main, tmp_path):
+    main = pdf_main
+    pdf_path = tmp_path / "multiline_title.pdf"
+
+    doc = fitz.open()
+    try:
+        page = doc.new_page()
+        page.insert_text(
+            (72, 72),
+            "BERT: Pre-training of Deep Bidirectional Transformers for",
+            fontsize=14,
+        )
+        page.insert_text(
+            (72, 92),
+            "Language Understanding",
+            fontsize=14,
+        )
+        page.insert_text(
+            (72, 125),
+            "Jacob Devlin",
+            fontsize=12,
+        )
+        page.insert_text(
+            (72, 155),
+            "Abstract",
+            fontsize=12,
+        )
+        doc.save(pdf_path)
+    finally:
+        doc.close()
+
+    _, metadata = main._extract_pdf(
+        pdf_path,
+        original_filename=pdf_path.name,
+    )
+
+    assert metadata["title"] == (
+        "BERT: Pre-training of Deep Bidirectional Transformers for "
+        "Language Understanding"
+    )

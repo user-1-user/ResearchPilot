@@ -599,6 +599,8 @@ def _extract_pdf(file_path: Path, original_filename: str = "") -> tuple[list[dic
             raise HTTPException(413, f"PDF ???????{MAX_PDF_PAGES} ??")
 
         meta = dict(doc.metadata or {})
+        first_page_title_lines = []
+        first_page_title_size = None
 
         for index, page in enumerate(doc, start=1):
             text = page.get_text("text") or ""
@@ -648,6 +650,38 @@ def _extract_pdf(file_path: Path, original_filename: str = "") -> tuple[list[dic
                         if temp_name and os.path.exists(temp_name):
                             os.remove(temp_name)
 
+            if index == 1 and method == "text":
+                try:
+                    stop_title = False
+                    for block in page.get_text("dict").get("blocks", []):
+                        for line in block.get("lines", []):
+                            spans = line.get("spans", [])
+                            line_text = "".join(
+                                str(span.get("text", "")) for span in spans
+                            ).strip()
+                            if not line_text:
+                                continue
+
+                            line_size = max(
+                                (float(span.get("size", 0)) for span in spans),
+                                default=0,
+                            )
+
+                            if first_page_title_size is None:
+                                if 12 <= len(line_text) <= 180:
+                                    first_page_title_size = line_size
+                                    first_page_title_lines.append(line_text)
+                            elif abs(line_size - first_page_title_size) <= 0.5:
+                                first_page_title_lines.append(line_text)
+                            else:
+                                stop_title = True
+                                break
+
+                        if stop_title:
+                            break
+                except Exception as exc:
+                    log.debug("PDF title font extraction skipped: %s", exc)
+
             pages.append({
                 "page": index,
                 "text": text,
@@ -674,14 +708,17 @@ def _extract_pdf(file_path: Path, original_filename: str = "") -> tuple[list[dic
 
     title = (meta.get("title") or "").strip()
     if not title or title.lower() in {"untitled", "unknown"}:
-        title = next(
-            (
-                line.strip()
-                for line in first_text.splitlines()
-                if 12 <= len(line.strip()) <= 180
-            ),
-            "?????",
-        )
+        if first_page_title_lines:
+            title = " ".join(first_page_title_lines).strip()
+        else:
+            title = next(
+                (
+                    line.strip()
+                    for line in first_text.splitlines()
+                    if 12 <= len(line.strip()) <= 180
+                ),
+                "?????",
+            )
 
     doi_match = DOI_RE.search("\n".join(p["text"] for p in pages[:8]))
     arxiv_match = ARXIV_RE.search(original_filename + " " + first_text[:500])
@@ -2573,42 +2610,166 @@ def _normalized_title(value: str) -> str:
 
 
 def _build_graph_data(user_id: str) -> dict:
+    def canonical_doi(value):
+        value = str(value or "").strip().lower()
+        value = re.sub(r"^https?://(?:dx\.)?doi\.org/", "", value)
+        value = re.sub(r"^doi:\s*", "", value)
+        return value.rstrip(".,;:)]}>\"'")
+
     papers = []
     with db() as conn:
-        rows = conn.execute("SELECT id,filename,full_text,metadata_json,page_count FROM papers WHERE user_id=?", (user_id,)).fetchall()
-    papers = [dict(r) for r in rows if not _metadata_is_pending(r["metadata_json"])]
+        rows = conn.execute(
+            "SELECT id,filename,full_text,metadata_json,page_count FROM papers WHERE user_id=?",
+            (user_id,),
+        ).fetchall()
+
+    for row in rows:
+        if _metadata_is_pending(row["metadata_json"]):
+            continue
+        paper = dict(row)
+        try:
+            paper["_metadata"] = json.loads(paper["metadata_json"] or "{}")
+        except (TypeError, ValueError):
+            paper["_metadata"] = {}
+        papers.append(paper)
+
     graph = nx.DiGraph()
-    for p in papers:
-        metadata = json.loads(p["metadata_json"] or "{}")
-        graph.add_node(p["id"], label=metadata.get("title") or Path(p["filename"]).stem, filename=p["filename"], doi=metadata.get("doi", ""))
-    title_index = {}
     doi_index = {}
-    for p in papers:
-        metadata = json.loads(p["metadata_json"] or "{}")
-        title_index[p["id"]] = _normalized_title(metadata.get("title") or Path(p["filename"]).stem)
-        if metadata.get("doi"): doi_index[p["id"]] = metadata["doi"].lower()
+    title_index = {}
+
+    for paper in papers:
+        metadata = paper["_metadata"]
+        title = metadata.get("title") or Path(paper["filename"]).stem
+        doi = canonical_doi(metadata.get("doi"))
+
+        graph.add_node(
+            paper["id"],
+            label=title,
+            filename=paper["filename"],
+            doi=doi,
+        )
+
+        if doi:
+            doi_index.setdefault(doi, []).append(paper["id"])
+
+        normalized_title = _normalized_title(title)
+        if len(normalized_title) >= 18:
+            title_index[paper["id"]] = normalized_title
+
     for source in papers:
-        text = source["full_text"].lower()
-        for target in papers:
-            if source["id"] == target["id"]: continue
-            target_doi = doi_index.get(target["id"])
-            target_title = title_index.get(target["id"], "")
-            matched = bool(target_doi and target_doi in text)
-            if not matched and len(target_title) >= 18:
-                matched = target_title in _normalized_title(text)
-            if matched:
-                graph.add_edge(source["id"], target["id"], relation="cites", evidence="DOI/title mention")
+        metadata = source["_metadata"]
+        source_id = source["id"]
+
+        reference_dois = metadata.get("reference_dois") or []
+        if isinstance(reference_dois, str):
+            reference_dois = [reference_dois]
+
+        matched_targets = {}
+
+        for reference_doi in reference_dois:
+            doi = canonical_doi(reference_doi)
+            for target_id in doi_index.get(doi, []):
+                if target_id != source_id:
+                    matched_targets[target_id] = "reference DOI"
+
+        reference_lines = metadata.get("references_preview") or []
+        if isinstance(reference_lines, str):
+            reference_lines = [reference_lines]
+
+        normalized_references = []
+        reference_buffer = ""
+        previous_line = ""
+
+        for raw_line in reference_lines:
+            line = str(raw_line or "").strip()
+            line = re.sub(
+                r"^\s*(?:\[\s*\d+\s*\]|\(\s*\d+\s*\)|\d+[.)])\s*",
+                "",
+                line,
+            )
+            if not line:
+                continue
+
+            is_continuation = bool(reference_buffer) and (
+                previous_line.rstrip().endswith((",", "-", "?", "?"))
+                or bool(re.match(r"^[a-z]", line))
+            )
+
+            if is_continuation:
+                reference_buffer += " " + line
+            else:
+                if reference_buffer:
+                    normalized = _normalized_title(reference_buffer)
+                    if normalized:
+                        normalized_references.append(normalized)
+                reference_buffer = line
+
+            previous_line = line
+
+        if reference_buffer:
+            normalized = _normalized_title(reference_buffer)
+            if normalized:
+                normalized_references.append(normalized)
+
+        for target_id, target_title in title_index.items():
+            if target_id == source_id or target_id in matched_targets:
+                continue
+            if any(target_title in line for line in normalized_references):
+                matched_targets[target_id] = "reference title"
+
+        for target_id, evidence in matched_targets.items():
+            graph.add_edge(
+                source_id,
+                target_id,
+                relation="cites",
+                evidence=evidence,
+            )
+
     if graph.number_of_nodes() == 0:
         return {"nodes": [], "edges": [], "metrics": {}}
-    pagerank = nx.pagerank(graph) if graph.number_of_edges() else {n: 1 / graph.number_of_nodes() for n in graph.nodes}
-    try: between = nx.betweenness_centrality(graph)
-    except Exception: between = {n: 0 for n in graph.nodes}
+
+    pagerank = (
+        nx.pagerank(graph)
+        if graph.number_of_edges()
+        else {node: 1 / graph.number_of_nodes() for node in graph.nodes}
+    )
+    try:
+        between = nx.betweenness_centrality(graph)
+    except Exception:
+        between = {node: 0 for node in graph.nodes}
+
     nodes = []
     for node, data in graph.nodes(data=True):
-        nodes.append({"id": node, "name": data["label"], "filename": data["filename"], "size": 45 + pagerank[node] * 1000, "pagerank": round(pagerank[node], 6), "betweenness": round(between[node], 6), "in_degree": graph.in_degree(node), "out_degree": graph.out_degree(node)})
-    edges = [{"source": a, "target": b, **data} for a, b, data in graph.edges(data=True)]
-    ranked = sorted(nodes, key=lambda x: x["pagerank"], reverse=True)
-    return {"nodes": nodes, "edges": edges, "metrics": {"paper_count": graph.number_of_nodes(), "citation_edges": graph.number_of_edges(), "top_foundational_papers": ranked[:5], "isolated_papers": [n["name"] for n in nodes if graph.degree(n["id"]) == 0]}}
+        nodes.append({
+            "id": node,
+            "name": data["label"],
+            "filename": data["filename"],
+            "size": 45 + pagerank[node] * 1000,
+            "pagerank": round(pagerank[node], 6),
+            "betweenness": round(between[node], 6),
+            "in_degree": graph.in_degree(node),
+            "out_degree": graph.out_degree(node),
+        })
+
+    edges = [
+        {"source": source, "target": target, **data}
+        for source, target, data in graph.edges(data=True)
+    ]
+    ranked = sorted(nodes, key=lambda item: item["pagerank"], reverse=True)
+
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "metrics": {
+            "paper_count": graph.number_of_nodes(),
+            "citation_edges": graph.number_of_edges(),
+            "top_foundational_papers": ranked[:5],
+            "isolated_papers": [
+                node["name"] for node in nodes
+                if graph.degree(node["id"]) == 0
+            ],
+        },
+    }
 
 
 @app.post("/api/graph/build")
